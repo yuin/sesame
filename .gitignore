@@ -1,0 +1,15 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+*.test
+*.pprof
+
+*.out
+
+.DS_Store
+
+cmd/sesame/sesame
+*_gen.go

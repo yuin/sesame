@@ -1,0 +1,23 @@
+mappers:
+  package: mapper
+  destination: ./mapper/mappers_gen.go
+mappings:
+  - name: TodoMapper
+    package: mapper
+    destination: ./mapper/todo_mapper_gen.go
+    bidirectional: true
+    a:
+      package: ./model
+      name: TodoModel
+    b:
+      package: ./domain
+      name: Todo
+    fields:
+      - a: Done
+        b: Finished
+      - a: UserID
+        b: User.ID
+    ignores:
+      - a: ValidateOnly
+_includes:
+  - ./*/**/*_sesame.yml
