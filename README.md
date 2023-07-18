@@ -2,7 +2,6 @@
 
 [![https://pkg.go.dev/github.com/yuin/sesame](https://pkg.go.dev/badge/github.com/yuin/sesame.svg)](https://pkg.go.dev/github.com/yuin/sesame)
 [![https://github.com/yuin/sesame/actions?query=workflow:test](https://github.com/yuin/sesame/workflows/test/badge.svg?branch=master&event=push)](https://github.com/yuin/sesame/actions?query=workflow:test)
-[![https://coveralls.io/github/yuin/sesame](https://coveralls.io/repos/github/yuin/sesame/badge.svg?branch=master)](https://coveralls.io/github/yuin/sesame)
 [![https://goreportcard.com/report/github.com/yuin/sesame](https://goreportcard.com/badge/github.com/yuin/sesame)](https://goreportcard.com/report/github.com/yuin/sesame)
 
 > An object-to-object mapper generator for Go that can 'scale'
@@ -248,3 +247,12 @@ mappers.AddFactory("TodoMapperHelper", func(ms Mappers) (any, error) {
 ```
 
 Helpers will be called at the end of the generated mapping implementations.
+
+## Donation
+BTC: 1NEDSyUmo4SMTDP83JJQSWi1MvQUGGNMZB
+
+## License
+MIT
+
+## Author
+Yusuke Inuzuka
