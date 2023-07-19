@@ -87,10 +87,8 @@ func (m *Mappers) ConfigLoaded(path string) []error {
 	if len(m.Destination) == 0 {
 		errs = append(errs, fmt.Errorf("%s:\t%s.destination must not be empty", m.SourceFile, path))
 	}
-	var err error
-	m.Destination, err = filepath.Abs(m.Destination)
-	if err != nil {
-		errs = append(errs, err)
+	if !filepath.IsAbs(m.Destination) {
+		m.Destination = filepath.Join(filepath.Dir(m.SourceFile), m.Destination)
 	}
 	return errs
 }
@@ -137,10 +135,8 @@ func (m *Mapping) ConfigLoaded(path string) []error {
 	if len(m.Destination) == 0 {
 		errs = append(errs, fmt.Errorf("%s:\t%s.destination must not be empty", m.SourceFile, path))
 	}
-	var err error
-	m.Destination, err = filepath.Abs(m.Destination)
-	if err != nil {
-		errs = append(errs, err)
+	if !filepath.IsAbs(m.Destination) {
+		m.Destination = filepath.Join(filepath.Dir(m.SourceFile), m.Destination)
 	}
 	if len(m.Package) == 0 {
 		m.Package = filepath.Base(m.Destination)
@@ -229,6 +225,11 @@ func (m *MappingOperand) ConfigLoaded(path string) []error {
 	if len(m.Name) == 0 {
 		errs = append(errs, fmt.Errorf("%s:\t%s.name must not be empty", m.SourceFile, path))
 	}
+
+	if !filepath.IsAbs(m.Package) {
+		m.Package = filepath.Join(filepath.Dir(m.SourceFile), m.Package)
+	}
+
 	return errs
 }
 

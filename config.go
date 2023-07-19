@@ -70,6 +70,12 @@ func LoadConfig(target any, path string) error {
 }
 
 func loadMap(path string, fs fs.FS) (m map[any]any, err error) {
+	if !filepath.IsAbs(path) {
+		path, err = filepath.Abs(path)
+		if err != nil {
+			return
+		}
+	}
 	f, err := fs.Open(path)
 	if err != nil {
 		return nil, err
