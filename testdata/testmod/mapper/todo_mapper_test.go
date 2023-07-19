@@ -88,14 +88,14 @@ type todoMapperHelper struct {
 
 var _ TodoMapperHelper = &todoMapperHelper{}
 
-func (h *todoMapperHelper) AtoB(source *model.TodoModel, dest *domain.Todo) error {
+func (h *todoMapperHelper) TodoModelToTodo(source *model.TodoModel, dest *domain.Todo) error {
 	if source.ValidateOnly {
 		dest.Attributes["ValidateOnly"] = []string{"true"}
 	}
 	return nil
 }
 
-func (h *todoMapperHelper) BtoA(source *domain.Todo, dest *model.TodoModel) error {
+func (h *todoMapperHelper) TodoToTodoModel(source *domain.Todo, dest *model.TodoModel) error {
 	if _, ok := source.Attributes["ValidateOnly"]; ok {
 		dest.ValidateOnly = true
 	}

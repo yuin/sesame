@@ -121,8 +121,8 @@ import (
 )
 
 type TodoMapperHelper interface {
-    AtoB(*pkg00000.TodoModel, *pkg00001.Todo) error
-    BtoA(*pkg00001.Todo, *pkg00000.TodoModel) error
+    ModelToEntity(*pkg00000.TodoModel, *pkg00001.Todo) error
+    EntityToModel(*pkg00001.Todo, *pkg00000.TodoModel) error
 }
 
 type TodoMapper interface {

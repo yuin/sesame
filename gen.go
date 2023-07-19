@@ -514,9 +514,9 @@ func (g *generator) Generate() error {
 			aArgSource := GetPreferableTypeSource(a.Type(), mctx)
 			bArgSource := GetPreferableTypeSource(b.Type(), mctx)
 			p("type %sHelper interface {", mapping.Name)
-			p("  AtoB(%s, %s) error", aArgSource, bArgSource)
+			p("  %s(%s, %s) error", mapping.MethodName(OperandA), aArgSource, bArgSource)
 			if mapping.Bidirectional {
-				p("  BtoA(%s, %s) error", bArgSource, aArgSource)
+				p("  %s(%s, %s) error", mapping.MethodName(OperandB), bArgSource, aArgSource)
 			}
 			p("}")
 			p("")
@@ -684,7 +684,7 @@ func genMapFunc(printer Printer, mapping *Mapping,
 		return err
 	}
 	p("  if m.helper != nil {")
-	p("     if err := m.helper.%sto%s(source, dest); err != nil {", typ.String(), typ.Inverted().String())
+	p("     if err := m.helper.%s(source, dest); err != nil {", mapping.MethodName(typ))
 	p("       return nil, err")
 	p("     }")
 	p("  }")
