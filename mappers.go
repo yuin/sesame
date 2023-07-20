@@ -41,13 +41,15 @@ func (s *singleton[T]) MustGet() T {
 	return instance
 }
 
+type MapperGetter = ` + mapperGetterSrc + `
+
 // Mappers is a collection of mappers.
 type Mappers interface {
 	// AddFactory adds given object factory to this mappers.
-	AddFactory(name string, factory func(Mappers) (any, error))
+	AddFactory(name string, factory func(MapperGetter) (any, error))
 
 	// AddMapperFuncFactory adds given mapper function factory to this mappers.
-	AddMapperFuncFactory(sourceName string, destName string, factory func(Mappers) (any, error))
+	AddMapperFuncFactory(sourceName string, destName string, factory func(MapperGetter) (any, error))
 
 	// Get returns an object with given name.
 	Get(name string) (any, error)
@@ -71,7 +73,7 @@ func NewMappers() Mappers {
 	return mappers
 }
 
-func (d *mappers) AddFactory(name string, factory func(Mappers) (any, error)) {
+func (d *mappers) AddFactory(name string, factory func(MapperGetter) (any, error)) {
 	s := newSingleton[any](func() (any, error) {
 		return factory(d)
 	})
@@ -80,7 +82,7 @@ func (d *mappers) AddFactory(name string, factory func(Mappers) (any, error)) {
 	})
 }
 
-func (d *mappers) AddMapperFuncFactory(sourceName string, destName string, factory func(Mappers) (any, error)) {
+func (d *mappers) AddMapperFuncFactory(sourceName string, destName string, factory func(MapperGetter) (any, error)) {
 	d.AddFactory(sourceName+":"+destName, factory)
 }
 

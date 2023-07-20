@@ -18,17 +18,17 @@ func (m *TimeStringMapper) TimeToString(source *time.Time) (string, error) {
 }
 
 func AddTimeToStringMapper(mappers interface {
-	AddFactory(string, func(Mappers) (any, error))
-	AddMapperFuncFactory(string, string, func(Mappers) (any, error))
+	AddFactory(string, func(MapperGetter) (any, error))
+	AddMapperFuncFactory(string, string, func(MapperGetter) (any, error))
 }) {
 	stringTime := &TimeStringMapper{}
-	mappers.AddFactory("TimeStringMapper", func(m Mappers) (any, error) {
+	mappers.AddFactory("TimeStringMapper", func(m MapperGetter) (any, error) {
 		return stringTime, nil
 	})
-	mappers.AddMapperFuncFactory("string", "time#Time", func(m Mappers) (any, error) {
+	mappers.AddMapperFuncFactory("string", "time#Time", func(m MapperGetter) (any, error) {
 		return stringTime.StringToTime, nil
 	})
-	mappers.AddMapperFuncFactory("time#Time", "string", func(m Mappers) (any, error) {
+	mappers.AddMapperFuncFactory("time#Time", "string", func(m MapperGetter) (any, error) {
 		return stringTime.TimeToString, nil
 	})
 }

@@ -106,7 +106,7 @@ func TestMapperHelper(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringMapper(mappers)
 
-	mappers.AddFactory("TodoMapperHelper", func(ms Mappers) (any, error) {
+	mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
 		return &todoMapperHelper{}, nil
 	})
 

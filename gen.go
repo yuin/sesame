@@ -648,12 +648,12 @@ func genMappers(mappers *Mappers, mapperFuncs []*mapperFunc, mctx *MappingContex
 		}
 
 		if _, ok := added[m.name]; !ok {
-			ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms Mappers) (any, error) {`, m.name))
+			ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms MapperGetter) (any, error) {`, m.name))
 			ms = append(ms, fmt.Sprintf("return %sNew%s(ms), nil", prefix, m.name))
 			ms = append(ms, "})")
 			added[m.name] = struct{}{}
 		}
-		ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms Mappers) (any, error) {`, m.mappersName))
+		ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms MapperGetter) (any, error) {`, m.mappersName))
 		ms = append(ms, fmt.Sprintf(`obj, err := ms.Get("%s")`, m.name))
 		ms = append(ms, `if err != nil { return nil, err }`)
 		ms = append(ms, fmt.Sprintf(`mapper, _ :=obj.(%s%s)`, prefix, m.name))

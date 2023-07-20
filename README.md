@@ -142,7 +142,7 @@ Mapping codes look like the following:
    ````go
    mappers := mapper.NewMappers()           # Creates new Mappers object
    mapper.AddTimeToStringMapper(mappers)    # Add custom mappers
-   mappers.AddFactory("TodoMapperHelper", func(ms Mappers) (any, error) {
+   mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
        return &todoMapperHelper{}, nil
    }) # Add helpers
 
@@ -187,19 +187,19 @@ func (m *TimeStringMapper) TimeToString(source *time.Time) (string, error) {
 }
 
 type Mappers interface {
-    AddFactory(string, func(Mappers) (any, error))
-    AddMapperFuncFactory(string, string, func(Mappers) (any, error))
+    AddFactory(string, func(MapperGetter) (any, error))
+    AddMapperFuncFactory(string, string, func(MapperGetter) (any, error))
 }
 
 func AddTimeToStringMapper(mappers Mappers) {
     stringTime := &TimeStringMapper{}
-    mappers.AddFactory("TimeStringMapper", func(m Mappers) (any, error) {
+    mappers.AddFactory("TimeStringMapper", func(m MapperGetter) (any, error) {
         return stringTime, nil
     })
-    mappers.AddMapperFuncFactory("string", "time#Time", func(m Mappers) (any, error) {
+    mappers.AddMapperFuncFactory("string", "time#Time", func(m MapperGetter) (any, error) {
         return stringTime.StringToTime, nil
     })
-    mappers.AddMapperFuncFactory("time#Time", "string", func(m Mappers) (any, error) {
+    mappers.AddMapperFuncFactory("time#Time", "string", func(m MapperGetter) (any, error) {
         return stringTime.TimeToString, nil
     })
 }
@@ -241,7 +241,7 @@ func (h *todoMapperHelper) BtoA(source *domain.Todo, dest *model.TodoModel) erro
 and register it as `{MAPPER_NAME}Helper`:
 
 ```go
-mappers.AddFactory("TodoMapperHelper", func(ms Mappers) (any, error) {
+mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
     return &todoMapperHelper{}, nil
 })
 ```
