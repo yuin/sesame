@@ -8,8 +8,10 @@ const mapperGetterSrc = `interface {
 const mappersSrc = `
 import (
 	"fmt"
+	"reflect"
+	"regexp"
+	"strings"
 	"sync"
-	"time"
 	{{IMPORTS}}
 )
 
@@ -45,6 +47,11 @@ type MapperGetter = ` + mapperGetterSrc + `
 
 // Mappers is a collection of mappers.
 type Mappers interface {
+	// Add adds given object to this mappers.
+	// Methods name like 'XxxxToYyyy' is automatically registered
+	// as mapper funcs.
+    Add(name string, mapper any)
+
 	// AddFactory adds given object factory to this mappers.
 	AddFactory(name string, factory func(MapperGetter) (any, error))
 
@@ -72,6 +79,48 @@ func NewMappers() Mappers {
 	{{MAPPERS}}
 	return mappers
 }
+
+var mapperFuncNamePattern = regexp.MustCompile("[A-Z][\\w]+To[A-Z].*")
+
+func (d *mappers) Add(name string, obj any) {
+	d.AddFactory(name, func(g MapperGetter) (any, error) {
+		return obj, nil
+	})
+	if strings.HasSuffix(name, "Helper") {
+		return
+	}
+	typ := reflect.TypeOf(obj)
+	for i := 0; i < typ.NumMethod(); i++ {
+		method := typ.Method(i)
+		if mapperFuncNamePattern.MatchString(method.Name) {
+			ft := reflect.TypeOf(method.Func.Interface())
+			if ft.NumIn() != 2 || ft.NumOut() != 2 {
+				continue
+			}
+			in := ft.In(1)
+			if in.Kind() == reflect.Ptr {
+				in = in.Elem()
+			}
+			out := ft.Out(0)
+			if out.Kind() == reflect.Ptr {
+				out = out.Elem()
+			}
+			inName := in.Name()
+			if len(in.PkgPath()) != 0 {
+				inName = in.PkgPath() + "#" + inName
+			}
+			outName := out.Name()
+			if len(out.PkgPath()) != 0 {
+				outName = out.PkgPath() + "#" + outName
+			}
+			f := reflect.ValueOf(obj).MethodByName(method.Name).Interface()
+			d.AddMapperFuncFactory(inName, outName, func(mg MapperGetter) (any, error) {
+				return f, nil
+			})
+		}
+	}
+}
+
 
 func (d *mappers) AddFactory(name string, factory func(MapperGetter) (any, error)) {
 	s := newSingleton[any](func() (any, error) {
