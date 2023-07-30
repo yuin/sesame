@@ -174,7 +174,14 @@ func (m *Mapping) PrivateName() string {
 type ObjectMapping struct {
 	// ExplicitOnly indicates that implicit mappings should not be
 	// performed.
-	ExplicitOnly bool
+	ExplicitOnly bool `mapstructure:"explicit-only"`
+
+	// IgnoreCase means this mapping ignores field name casing.
+	IgnoreCase bool `mapstructure:"ignore-case"`
+
+	// AllowUnmapped is set true, sesame does not fail if unmapped
+	// field exists.
+	AllowUnmapped bool `mapstructure:"allow-unmapped"`
 
 	// Fields is definitions of how fields will be mapped.
 	Fields FieldMappings
@@ -710,7 +717,7 @@ func genMapFuncBody(printer Printer,
 
 	destName, ok := mapping.Fields.Pair(typ, "*")
 	if ok { // embedded
-		destField, _ := GetField(destStruct, destName)
+		destField, _ := GetField(destStruct, destName, mapping.IgnoreCase)
 		err := genFieldMapStmts(printer, sourceNameBase, destField.Type(), destNameBase+"."+destName, destField.Type(), mctx)
 		if err != nil {
 			return err
@@ -721,18 +728,18 @@ func genMapFuncBody(printer Printer,
 			if mapping.Ignores.Contains(typ, sourceField.Name()) {
 				continue
 			}
-			found := false
 			var destFieldType types.Type
 			var destFieldNameBase string
 			destName, ok := mapping.Fields.Pair(typ, sourceField.Name())
 			if ok { // map explicitly
+				found := false
 				if destName == "*" { // embedded
 					found = true
 					destFieldType = sourceField.Type()
 					destFieldNameBase = destNameBase
 				} else {
 					parts := strings.SplitN(destName, ".", -1)
-					destField, ok := GetField(destStruct, destName)
+					destField, ok := GetField(destStruct, destName, mapping.IgnoreCase)
 					if ok {
 						found = true
 						destFieldType = destField.Type()
@@ -741,7 +748,7 @@ func genMapFuncBody(printer Printer,
 					if len(parts) > 1 {
 						for i := 1; i < len(parts); i++ {
 							nestName := strings.Join(parts[:i], ".")
-							nestField, ok := GetField(destStruct, nestName)
+							nestField, ok := GetField(destStruct, nestName, mapping.IgnoreCase)
 							if ok {
 								p("if %s.%s == nil {", destNameBase, nestName)
 								p("  %s.%s = %s{}", destNameBase, nestName, strings.Replace(GetSource(nestField.Type(), mctx), "*", "&", 1))
@@ -750,17 +757,23 @@ func genMapFuncBody(printer Printer,
 						}
 					}
 				}
+				if !found {
+					return fmt.Errorf("Could not map a field: '%s.%s.%s' to '%s'",
+						source.Pkg().Name(), source.Name(), sourceField.Name(), destName)
+				}
 			} else if !mapping.ExplicitOnly { // map implicitly
-				destField, ok := GetField(destStruct, sourceField.Name())
+				destField, ok := GetField(destStruct, sourceField.Name(), mapping.IgnoreCase)
 				if ok {
-					found = true
 					destFieldType = destField.Type()
 					destFieldNameBase = destNameBase + "." + destField.Name()
+				} else {
+					if mapping.AllowUnmapped {
+						LogFunc(LogLevelDebug, "%s.%s.%s is ignored", source.Pkg().Name(), source.Name(), sourceField.Name())
+						continue
+					}
+					return fmt.Errorf("Unmapped field: '%s.%s.%s'", source.Pkg().Name(), source.Name(), sourceField.Name())
 				}
-			}
-
-			if !found {
-				LogFunc(LogLevelDebug, "%s.%s.%s is ignored", source.Pkg().Name(), source.Name(), sourceField.Name())
+			} else {
 				continue
 			}
 
@@ -777,7 +790,7 @@ func genMapFuncBody(printer Printer,
 
 			parts := strings.SplitN(sourceFieldName, ".", 2)
 			if len(parts) > 1 {
-				f, ok := GetField(sourceStruct, parts[0])
+				f, ok := GetField(sourceStruct, parts[0], mapping.IgnoreCase)
 				if !ok {
 					continue
 				}
@@ -785,6 +798,7 @@ func genMapFuncBody(printer Printer,
 				nestMapping := NewObjectMapping()
 				nestMapping.ExplicitOnly = true
 				nestMapping.AddField(typ, parts[1], destFieldName)
+				nestMapping.IgnoreCase = mapping.IgnoreCase
 				err := genMapFuncBody(printer, f, sourceNameBase+"."+parts[0],
 					dest, destNameBase, nestMapping, typ, mctx)
 				if err != nil {

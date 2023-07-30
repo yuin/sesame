@@ -12,23 +12,25 @@ import (
 
 // GetField finds a *[types].Var by name.
 // If a field not found, GetField returns false.
-func GetField(st *types.Struct, name string) (*types.Var, bool) {
+func GetField(st *types.Struct, name string, ignoreCase bool) (*types.Var, bool) {
 	parts := strings.SplitN(name, ".", 2)
 	if len(parts) > 1 {
 		for i := 0; i < st.NumFields(); i++ {
 			f := st.Field(i)
-			if f.Name() == parts[0] {
+			if (f.Name() == parts[0]) ||
+				(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(parts[0])) {
 				s, ok := GetStructType(f.Type())
 				if !ok {
 					return nil, false
 				}
-				return GetField(s, parts[1])
+				return GetField(s, parts[1], ignoreCase)
 			}
 		}
 	} else {
 		for i := 0; i < st.NumFields(); i++ {
 			f := st.Field(i)
-			if f.Name() == name {
+			if (f.Name() == name) ||
+				(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(name)) {
 				return f, true
 			}
 		}

@@ -31,7 +31,7 @@ func TestTodoMapper(t *testing.T) {
 	todoMapper, _ := obj.(TodoMapper)
 
 	source := &model.TodoModel{
-		ID:     1,
+		Id:     1,
 		UserID: "AAA",
 		Title:  "Write unit tests",
 		Type:   1,
@@ -69,14 +69,14 @@ func TestTodoMapper(t *testing.T) {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
-	// entity.ID=in64, model.ID=int(32), so ID can not be casted into a dest type
+	// entity.ID=in64, model.Id=int(32), so ID can not be casted into a dest type
 	entity.ID = 1
 	reversed, err := todoMapper.TodoToTodoModel(entity)
 	if err != nil {
 		t.Fatal(err)
 	}
 	source.ValidateOnly = false
-	source.ID = 0
+	source.Id = 0
 
 	if diff := cmp.Diff(source, reversed); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
@@ -90,12 +90,18 @@ var _ TodoMapperHelper = &todoMapperHelper{}
 
 func (h *todoMapperHelper) TodoModelToTodo(source *model.TodoModel, dest *domain.Todo) error {
 	if source.ValidateOnly {
+		if dest.Attributes == nil {
+			dest.Attributes = map[string][]string{}
+		}
 		dest.Attributes["ValidateOnly"] = []string{"true"}
 	}
 	return nil
 }
 
 func (h *todoMapperHelper) TodoToTodoModel(source *domain.Todo, dest *model.TodoModel) error {
+	if source.Attributes == nil {
+		return nil
+	}
 	if _, ok := source.Attributes["ValidateOnly"]; ok {
 		dest.ValidateOnly = true
 	}
@@ -117,7 +123,7 @@ func TestMapperHelper(t *testing.T) {
 	todoMapper, _ := obj.(TodoMapper)
 
 	source := &model.TodoModel{
-		ID:     1,
+		Id:     1,
 		UserID: "AAA",
 		Title:  "Write unit tests",
 		Type:   1,

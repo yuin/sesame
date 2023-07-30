@@ -12,6 +12,7 @@ mappings:
     b:
       package: ./domain
       name: Todo
+    ignore-case: true
     fields:
       - a: Done
         b: Finished
@@ -19,5 +20,6 @@ mappings:
         b: User.ID
     ignores:
       - a: ValidateOnly
+      - b: User
 _includes:
   - ./*/**/*_sesame.yml

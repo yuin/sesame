@@ -92,14 +92,18 @@ mappings:                                        # configurations for object-to-
     b:                                           # mapping operand B
       package: ./domain
       name: Todo
-    explicitOnly: false                          # sesame maps same names automatically if false(default: false)
+    explicit-only: false                         # sesame maps same names automatically if false(default: false)
+    allow-unmapped:false                         # sesame fails with unmapped fields if false(default: false)
+                                                 #   This value is ignored if `explicit-only' is set true.
+    ignore-case:   false                         # sesame ignores field name cases if true(default: false)
     fields:                                      # relationships between A fields and B fields
-      - a: Done                                  # you can define nested mappings like UserID
-        b: Finished                              # you can define mappings for embedded structs by '*'
+      - a: Done                                  #   you can define nested mappings like UserID
+        b: Finished                              #   you can define mappings for embedded structs by '*'
       - a: UserID                                # 
         b: User.ID                               #
     ignores:                                     # ignores fields in operand X
       - a: ValidateOnly
+      - b: User
 _includes:                                       # includes separated configuration files
   - ./*/**/*_sesame.yml
 ```
@@ -140,18 +144,15 @@ Mapping codes look like the following:
 1. Create new Mappers object as a singleton object. The Mappers object is a groutine-safe.
 
    ````go
-   mappers := mapper.NewMappers()           # Creates new Mappers object
-   mapper.AddTimeToStringMapper(mappers)    # Add custom mappers
-   mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
-       return &todoMapperHelper{}, nil
-   }) # Add helpers
-
+   mappers := mapper.NewMappers()           // Creates new Mappers object
+   mapper.AddTimeToStringMapper(mappers)    // Add custom mappers
+   mappers.Add("TodoMapperHelper", &todoMapperHelper{}) // Add helpers
    ```
 
 2. Get a mapper and call it for mapping.
 
    ```go
-   obj, err := mappers.Get("TodoMapper")    # Get mapper by its name
+   obj, err := mappers.Get("TodoMapper")    // Get mapper by its name
    if err != nil {
        t.Fatal(err)
    }
@@ -267,6 +268,59 @@ mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
 ```
 
 Helpers will be called at the end of the generated mapping implementations.
+
+### Hierarchized mappers
+Large applications often consist of multiple go modules.
+
+```
+/
+|
++--- domain        : core business logics
+|      |
+|      +--- go.mod
+|
++--- grpc          : gRPC service
+|      |
+|      +--- go.mod
+|      +--- sesame.yml
+|
++--- lib           : libraries
+       |
+       +--- go.mod
+       +--- sesame.yml
+```
+
+- `lib` defines common mappers like 'StringTimeMapper' .
+- `gRPC` defines gRPC spcific mappers that maps `protoc` generated models to domain entities
+
+You can hierarchize mappers by a delegation like the following:
+
+```go
+type delegatingMappers struct {
+	Mappers
+	parent Mappers
+}
+
+func (d *delegatingMappers) Get(name string) (any, error) {
+	v, err := d.Mappers.Get(name)
+	if err != nil && strings.Contains(err.Error(), "not found") {
+		return d.parent.Get(name)
+	}
+	return v, err
+}
+
+func NewDefaultMappers(parent Mappers) Mappers {
+	m := NewMappers()
+	dm := &delegatingMappers{
+		Mappers: m,
+		parent:  parent,
+	}
+    // Add gRPC specific mappers and helpers
+    return dm
+}
+
+// mappers := grpc_mappers.NewDefaultMappers(lib_mappers.NewMappers())
+```
 
 ## Donation
 BTC: 1NEDSyUmo4SMTDP83JJQSWi1MvQUGGNMZB

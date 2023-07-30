@@ -1,7 +1,7 @@
 package model
 
 type TodoModel struct {
-	ID           int
+	Id           int
 	UserID       string
 	Title        string
 	Type         int
