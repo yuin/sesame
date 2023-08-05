@@ -1,6 +1,8 @@
 mappers:
   package: mapper
   destination: ./mapper/mappers_gen.go
+  nil-map: empty
+  nil-slice: empty
 mappings:
   - name: TodoMapper
     package: mapper
@@ -12,6 +14,8 @@ mappings:
     b:
       package: ./domain
       name: Todo
+    nil-map: nil
+    nil-slice: nil
     ignore-case: true
     fields:
       - a: Done
@@ -21,5 +25,25 @@ mappings:
     ignores:
       - a: ValidateOnly
       - b: User
+
+  - name: TodoMapperEmpty
+    package: mapper
+    destination: ./mapper/todo_mapper_empty_gen.go
+    bidirectional: true
+    a:
+      package: ./model
+      name: TodoModel
+    b:
+      package: ./domain
+      name: Todo
+    nil-map: empty
+    ignores:
+      - a: Id
+      - a: UserID
+      - a: Done
+      - a: ValidateOnly
+      - b: ID
+      - b: User
+      - b: Finished
 _includes:
   - ./*/**/*_sesame.yml

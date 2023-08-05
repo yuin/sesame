@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -46,6 +47,10 @@ redo:
 		if err := sesame.LoadConfig(&config, *generateConfig); err != nil {
 			sesame.LogFunc(sesame.LogLevelError, err.Error())
 			os.Exit(1)
+		}
+		if sesame.LogEnabledFor >= sesame.LogLevelDebug {
+			b, _ := json.Marshal(&config)
+			sesame.LogFunc(sesame.LogLevelDebug, string(b))
 		}
 		generator := sesame.NewGenerator(&config)
 		if err := generator.Generate(); err != nil {

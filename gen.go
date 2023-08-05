@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"golang.org/x/tools/imports"
 )
 
@@ -52,6 +54,8 @@ type Generation struct {
 func (g *Generation) ConfigLoaded(_ string) []error {
 	var errs []error
 	names := map[string]string{}
+	msNilMap := g.Mappers.NilMap
+	msNilSlice := g.Mappers.NilSlice
 	for _, m := range g.Mappings {
 		f, ok := names[m.Name]
 		if ok {
@@ -62,8 +66,56 @@ func (g *Generation) ConfigLoaded(_ string) []error {
 			errs = append(errs, fmt.Errorf("mappings.name must be an unique(duplicated name: %s%s)", m.Name, msg))
 		}
 		names[m.Name] = m.SourceFile
+
+		if m.NilMap == NilCollectionUnknown {
+			m.NilMap = msNilMap
+		}
+		if m.NilSlice == NilCollectionUnknown {
+			m.NilSlice = msNilSlice
+		}
 	}
 	return errs
+}
+
+// NilCollection is an enum that defines how are nil maps and nil slices mapped.
+type NilCollection int
+
+const (
+	// NilCollectionUnknown is a default value of NilCollection.
+	NilCollectionUnknown = iota
+
+	// NilCollectionAsNil maps nil collections as a nil.
+	NilCollectionAsNil
+
+	// NilCollectionAsEmpty map nil maps as empty collections.
+	NilCollectionAsEmpty
+
+	// NilCollectionMax is a maximum value of NilCollection.
+	NilCollectionMax
+)
+
+func stringToNilCollectionHookFunc() mapstructure.DecodeHookFunc {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{}) (interface{}, error) {
+		if f.Kind() != reflect.String || t.String() != "sesame.NilCollection" {
+			return data, nil
+		}
+
+		raw, ok := data.(string)
+		if !ok {
+			return NilCollectionUnknown, nil
+		}
+		switch raw {
+		case "nil":
+			return NilCollectionAsNil, nil
+		case "empty":
+			return NilCollectionAsEmpty, nil
+		default:
+			return nil, fmt.Errorf("Unknown nil collection mapping: %s", raw)
+		}
+	}
 }
 
 // Mappers is a definition of the mappers.
@@ -74,6 +126,12 @@ type Mappers struct {
 	// Destination is a file path that this mappers will be written.
 	Destination string
 
+	// NilMap defines how are nil maps are mapped.
+	NilMap NilCollection `mapstructure:"nil-map"`
+
+	// NilSlice defines how are nil maps are mapped.
+	NilSlice NilCollection `mapstructure:"nil-slice"`
+
 	// SourceFile is a source file path that contains this configuration.
 	SourceFile string
 }
@@ -81,6 +139,12 @@ type Mappers struct {
 // ConfigLoaded is an event handler will be executed when config is loaded.
 func (m *Mappers) ConfigLoaded(path string) []error {
 	var errs []error
+	if m.NilMap == NilCollectionUnknown {
+		m.NilMap = NilCollectionAsNil
+	}
+	if m.NilSlice == NilCollectionUnknown {
+		m.NilSlice = NilCollectionAsNil
+	}
 	if len(m.Package) == 0 {
 		errs = append(errs, fmt.Errorf("%s:\t%s.package must not be empty", m.SourceFile, path))
 	}
@@ -188,6 +252,12 @@ type ObjectMapping struct {
 
 	// Ignores is definitions of the fileds should be ignored.
 	Ignores Ignores
+
+	// NilMap defines how are nil maps are mapped.
+	NilMap NilCollection `mapstructure:"nil-map"`
+
+	// NilSlice defines how are nil maps are mapped.
+	NilSlice NilCollection `mapstructure:"nil-slice"`
 }
 
 // NewObjectMapping creates new [ObjectMapping] .
@@ -718,7 +788,8 @@ func genMapFuncBody(printer Printer,
 	destName, ok := mapping.Fields.Pair(typ, "*")
 	if ok { // embedded
 		destField, _ := GetField(destStruct, destName, mapping.IgnoreCase)
-		err := genFieldMapStmts(printer, sourceNameBase, destField.Type(), destNameBase+"."+destName, destField.Type(), mctx)
+		err := genFieldMapStmts(printer, sourceNameBase, destField.Type(),
+			destNameBase+"."+destName, destField.Type(), mapping, mctx)
 		if err != nil {
 			return err
 		}
@@ -778,7 +849,7 @@ func genMapFuncBody(printer Printer,
 			}
 
 			err := genFieldMapStmts(printer, sourceNameBase+"."+sourceField.Name(),
-				sourceField.Type(), destFieldNameBase, destFieldType, mctx)
+				sourceField.Type(), destFieldNameBase, destFieldType, mapping, mctx)
 			if err != nil {
 				return err
 			}
@@ -814,6 +885,7 @@ func genMapFuncBody(printer Printer,
 func genFieldMapStmts(printer Printer,
 	sourceName string, sourceType types.Type,
 	destName string, destType types.Type,
+	mapping *ObjectMapping,
 	mctx *MappingContext) error {
 	p := printer.P
 	mctx.AddMapperFuncField(sourceType, destType)
@@ -830,7 +902,8 @@ func genFieldMapStmts(printer Printer,
 		p("for i%d, elm := range %s {", i, sourceName)
 		n := mctx.NextVarCount()
 		p("\t\tvar tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(), fmt.Sprintf("tmp%d", n), dtype.Elem(), mctx); err != nil {
+		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
+			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
 			return err
 		}
 		genAssignStmt(printer, fmt.Sprintf("tmp%d", n), typ.Elem(), fmt.Sprintf("%s[i%d]", destName, i), dtype.Elem(), mctx)
@@ -843,13 +916,25 @@ func genFieldMapStmts(printer Printer,
 		// TODO: test slice and array and array size
 		// TODO: support a conversion slice and array?
 
+		p("if %s == nil {", sourceName)
+		switch mapping.NilMap {
+		case NilCollectionAsNil:
+			p("%s = nil", destName)
+		case NilCollectionAsEmpty:
+			p("%s = make(%s, 0)", destName, GetSource(destType, mctx))
+		default:
+		}
+		p("} else {")
+
 		p("for _, elm := range %s {", sourceName)
 		n := mctx.NextVarCount()
 		p("var tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(), fmt.Sprintf("tmp%d", n), dtype.Elem(), mctx); err != nil {
+		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
+			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
 			return err
 		}
 		p("%s = append(%s, tmp%d)", destName, destName, n)
+		p("}")
 		p("}")
 	case *types.Map:
 		// TODO: support a conversion map and struct?
@@ -858,14 +943,26 @@ func genFieldMapStmts(printer Printer,
 			return fmt.Errorf("type mismatch: %s and %s should be a map", sourceType, destType)
 		}
 
+		p("if %s == nil {", sourceName)
+		switch mapping.NilMap {
+		case NilCollectionAsNil:
+			p("%s = nil", destName)
+		case NilCollectionAsEmpty:
+			p("%s = make(%s)", destName, GetSource(destType, mctx))
+		default:
+		}
+		p("} else {")
+
 		p("%s = make(%s)", destName, GetSource(destType, mctx))
 		p("for key, elm := range %s {", sourceName)
 		n := mctx.NextVarCount()
 		p("var tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(), fmt.Sprintf("tmp%d", n), dtype.Elem(), mctx); err != nil {
+		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
+			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
 			return err
 		}
 		genAssignStmt(printer, fmt.Sprintf("tmp%d", n), typ.Elem(), fmt.Sprintf("%s[key]", destName), dtype.Elem(), mctx)
+		p("}")
 		p("}")
 	case *types.Chan:
 		LogFunc(LogLevelInfo, "chan type %s ignored", sourceName)

@@ -163,3 +163,81 @@ func TestMapperHelper(t *testing.T) {
 	}
 
 }
+
+func TestNilCollection(t *testing.T) {
+	mappers := NewMappers()
+	mapper.AddTimeToStringMapper(mappers)
+
+	obj, err := mappers.Get("TodoMapperEmpty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	todoMapper, _ := obj.(TodoMapper)
+
+	source := &model.TodoModel{
+		Id:           1,
+		UserID:       "AAA",
+		Title:        "Write unit tests",
+		Type:         1,
+		Attributes:   nil,
+		Tags:         [5]string{"Task"},
+		Done:         false,
+		UpdatedAt:    "2023-07-18T10:15:36Z",
+		ValidateOnly: true,
+	}
+
+	entity, err := todoMapper.TodoModelToTodo(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := &domain.Todo{
+		ID:         0,
+		User:       nil,
+		Title:      "Write unit tests",
+		Type:       domain.TodoTypePrivate,
+		Attributes: map[string][]string{},
+		Tags:       [5]string{"Task"},
+		Finished:   false,
+		UpdatedAt:  mustTime("2023-07-18T10:15:36Z"),
+	}
+
+	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
+	}
+
+	source = &model.TodoModel{
+		Id:     1,
+		UserID: "AAA",
+		Title:  "Write unit tests",
+		Type:   1,
+		Attributes: map[string][]string{
+			"Priority": nil,
+		},
+		Tags:         [5]string{"Task"},
+		Done:         false,
+		UpdatedAt:    "2023-07-18T10:15:36Z",
+		ValidateOnly: true,
+	}
+
+	entity, err = todoMapper.TodoModelToTodo(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected = &domain.Todo{
+		ID:    0,
+		User:  nil,
+		Title: "Write unit tests",
+		Type:  domain.TodoTypePrivate,
+		Attributes: map[string][]string{
+			"Priority": make([]string, 0),
+		},
+		Tags:      [5]string{"Task"},
+		Finished:  false,
+		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
+	}
+
+	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
+	}
+
+}

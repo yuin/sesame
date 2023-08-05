@@ -79,6 +79,8 @@ sesame uses mapping configuration files written in YAML.
 mappers:                                         # configurations for a mapper collection
   package: mapper                                # package name for generated mapper collection
   destination: ./mapper/mappers_gen.go           # destination for generation
+  nil-map: nil                                   # how are nil collections mapped
+  nil-slice: nil                                 #   a value should be one of 'nil', 'empty' (default: nil)
 mappings:                                        # configurations for object-to-object mappings
   - name: TodoMapper                             # name of the mapper. This must be unique within all mappers
     package: mapper                              # package name for generated mapper
@@ -96,6 +98,8 @@ mappings:                                        # configurations for object-to-
     allow-unmapped:false                         # sesame fails with unmapped fields if false(default: false)
                                                  #   This value is ignored if `explicit-only' is set true.
     ignore-case:   false                         # sesame ignores field name cases if true(default: false)
+    nil-map: nil                                 # how nil collections are mapped
+    nil-slice: nil                               #   a default value is inherited from mappers
     fields:                                      # relationships between A fields and B fields
       - a: Done                                  #   you can define nested mappings like UserID
         b: Finished                              #   you can define mappings for embedded structs by '*'

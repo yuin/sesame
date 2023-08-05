@@ -33,6 +33,7 @@ func LoadConfigFS(target any, path string, fs fs.FS) error {
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			mapstructure.StringToTimeDurationHookFunc(),
+			stringToNilCollectionHookFunc(),
 		),
 		WeaklyTypedInput: true,
 		Result:           target,
@@ -182,11 +183,6 @@ func walkConfig(v reflect.Value, path string) []error {
 	case reflect.Ptr, reflect.Interface:
 		errs = append(errs, walkConfig(v.Elem(), path)...)
 	case reflect.Slice:
-		if handler, ok := v.Interface().(interface {
-			ConfigLoaded(string) []error
-		}); ok {
-			errs = append(errs, handler.ConfigLoaded(path)...)
-		}
 		prevSourceFile := ""
 		offset := 0
 		for i := 0; i < v.Len(); i++ {
@@ -200,19 +196,19 @@ func walkConfig(v reflect.Value, path string) []error {
 				}
 			}
 			childPath := fmt.Sprintf("%s[%d]", path, i-offset)
+			errs = append(errs, walkConfig(v.Index(i), childPath)...)
 			if handler, ok := v.Index(i).Interface().(interface {
 				ConfigLoaded(string) []error
 			}); ok {
 				errs = append(errs, handler.ConfigLoaded(childPath)...)
 			}
-			errs = append(errs, walkConfig(v.Index(i), childPath)...)
 		}
-	case reflect.Struct:
-		if handler, ok := v.Addr().Interface().(interface {
+		if handler, ok := v.Interface().(interface {
 			ConfigLoaded(string) []error
 		}); ok {
 			errs = append(errs, handler.ConfigLoaded(path)...)
 		}
+	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			t := v.Type().Field(i).Tag.Get("mapstructure")
 			name := v.Type().Field(i).Name
@@ -224,6 +220,11 @@ func walkConfig(v reflect.Value, path string) []error {
 				childPath = path
 			}
 			errs = append(errs, walkConfig(v.Field(i), childPath)...)
+		}
+		if handler, ok := v.Addr().Interface().(interface {
+			ConfigLoaded(string) []error
+		}); ok {
+			errs = append(errs, handler.ConfigLoaded(path)...)
 		}
 	default:
 	}
