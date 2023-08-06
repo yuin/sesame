@@ -43,6 +43,19 @@ func (s *singleton[T]) MustGet() T {
 	return instance
 }
 
+type merror struct {
+	error
+	notFound bool
+}
+
+func (e *merror) NotFound() bool {
+	return e.notFound
+}
+
+func (e *merror) Unwrap() error {
+	return e.error
+}
+
 type MapperGetter = ` + mapperGetterSrc + `
 
 // Mappers is a collection of mappers.
@@ -141,11 +154,19 @@ func (d *mappers) Get(name string) (any, error) {
 		if fok && factory != nil {
 			obj, err := factory.(func(*mappers) (any, error))(d)
 			if err != nil {
-				return nil, fmt.Errorf("Failed to create a mapper: %%w", err)
+				merr := &merror {
+					error: err,
+					notFound: false,
+				}
+				return nil, fmt.Errorf("Failed to create a mapper: %%w", merr)
 			}
 			d.dependencies.Store(name, obj)
 		} else {
-			return nil, fmt.Errorf("Object %%s not found", name)
+			merr := &merror {
+				error: fmt.Errorf("Object %%s not found", name),
+				notFound: true,
+			}
+			return nil, merr
 		}
 	}
 	obj, _ := d.dependencies.Load(name)

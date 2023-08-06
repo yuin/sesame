@@ -1,6 +1,7 @@
 package mapper_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -240,4 +241,15 @@ func TestNilCollection(t *testing.T) {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
+}
+
+func TestMapperNotFound(t *testing.T) {
+	mappers := NewMappers()
+	_, err := mappers.Get("Dummy")
+	var merr interface {
+		NotFound() bool
+	}
+	if !errors.As(err, &merr) || !merr.NotFound() {
+		t.Errorf("error should be a not found error")
+	}
 }

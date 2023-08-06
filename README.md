@@ -307,7 +307,10 @@ type delegatingMappers struct {
 
 func (d *delegatingMappers) Get(name string) (any, error) {
 	v, err := d.Mappers.Get(name)
-	if err != nil && strings.Contains(err.Error(), "not found") {
+	var merr interface {
+		NotFound() bool
+	}
+	if errors.As(err, &merr) && merr.NotFound() {
 		return d.parent.Get(name)
 	}
 	return v, err
