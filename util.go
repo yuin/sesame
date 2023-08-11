@@ -10,6 +10,19 @@ import (
 	"strings"
 )
 
+// GetMethod finds a *[types].Func by name.
+// If a method not found, GetField returns false.
+func GetMethod(nm *types.Named, name string, ignoreCase bool) (*types.Func, bool) {
+	for i := 0; i < nm.NumMethods(); i++ {
+		f := nm.Method(i)
+		if (f.Name() == name) ||
+			(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(name)) {
+			return f, true
+		}
+	}
+	return nil, false
+}
+
 // GetField finds a *[types].Var by name.
 // If a field not found, GetField returns false.
 func GetField(st *types.Struct, name string, ignoreCase bool) (*types.Var, bool) {
@@ -47,6 +60,18 @@ func GetStructType(typ types.Type) (*types.Struct, bool) {
 	case *types.Named:
 		return GetStructType(t.Obj().Type().Underlying())
 	case *types.Struct:
+		return t, true
+	}
+	return nil, false
+}
+
+// GetNamedType returns a named type if an underlying type
+// is a struct type.
+func GetNamedType(typ types.Type) (*types.Named, bool) {
+	switch t := typ.(type) {
+	case *types.Pointer:
+		return GetNamedType(t.Elem())
+	case *types.Named:
 		return t, true
 	}
 	return nil, false

@@ -10,4 +10,13 @@ type TodoModel struct {
 	Done         bool
 	UpdatedAt    string
 	ValidateOnly bool
+	privateValue int
+}
+
+func (m *TodoModel) SetPrivateValue(v int) {
+	m.privateValue = v
+}
+
+func (m *TodoModel) PrivateValue() int {
+	return m.privateValue
 }

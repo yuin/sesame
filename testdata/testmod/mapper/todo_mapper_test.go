@@ -6,12 +6,16 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"example.com/testmod/domain"
 	"example.com/testmod/mapper"
 	. "example.com/testmod/mapper"
 	"example.com/testmod/model"
 )
+
+var todoModelIgnores = cmpopts.IgnoreUnexported(model.TodoModel{})
+var todoEntityIgnores = cmpopts.IgnoreUnexported(domain.Todo{})
 
 func mustTime(s string) time.Time {
 	v, err := time.Parse(time.RFC3339, s)
@@ -45,6 +49,7 @@ func TestTodoMapper(t *testing.T) {
 		UpdatedAt:    "2023-07-18T10:15:36Z",
 		ValidateOnly: true,
 	}
+	source.SetPrivateValue(10)
 
 	entity, err := todoMapper.TodoModelToTodo(source)
 	if err != nil {
@@ -65,9 +70,13 @@ func TestTodoMapper(t *testing.T) {
 		Finished:  false,
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
 	}
+	expected.SetPrivateValue(10)
 
-	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
+	}
+	if expected.PrivateValue() != entity.PrivateValue() {
+		t.Errorf("private fields with getter/setter must be mapped")
 	}
 
 	// entity.ID=in64, model.Id=int(32), so ID can not be casted into a dest type
@@ -79,8 +88,11 @@ func TestTodoMapper(t *testing.T) {
 	source.ValidateOnly = false
 	source.Id = 0
 
-	if diff := cmp.Diff(source, reversed); len(diff) != 0 {
+	if diff := cmp.Diff(source, reversed, todoModelIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
+	}
+	if source.PrivateValue() != reversed.PrivateValue() {
+		t.Errorf("private fields with getter/setter must be mapped")
 	}
 }
 
@@ -159,7 +171,7 @@ func TestMapperHelper(t *testing.T) {
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
@@ -202,7 +214,7 @@ func TestNilCollection(t *testing.T) {
 		UpdatedAt:  mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
@@ -237,7 +249,7 @@ func TestNilCollection(t *testing.T) {
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity); len(diff) != 0 {
+	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 

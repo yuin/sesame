@@ -381,6 +381,170 @@ func (f Ignores) ConfigLoaded(path string) []error {
 	return errs
 }
 
+// MappingValue is a value that will be a source of the mapping
+// or a destination of the mapping.
+type MappingValue interface {
+	// GetGetterSource returns a source code of the getter.
+	GetGetterSource() string
+
+	// CanGet returns true if this value is readable.
+	CanGet() bool
+
+	// GetSetterSource returns a source code of the setter.
+	GetSetterSource(valueSource string) string
+
+	// DisplayName returns a name for humans.
+	DisplayName() string
+
+	// CanSet returns true if this value is writable.
+	CanSet() bool
+
+	// Type is a type of the value
+	Type() types.Type
+}
+
+var _ MappingValue = (*localMappingValue)(nil)
+
+type localMappingValue struct {
+	name string
+	typ  types.Type
+}
+
+// NewLocalMappingValue is a [MappingValue] that related to
+// local variables.
+func NewLocalMappingValue(name string, typ types.Type) MappingValue {
+	return &localMappingValue{
+		name: name,
+		typ:  typ,
+	}
+}
+
+func (v *localMappingValue) DisplayName() string {
+	return v.name
+}
+
+func (v *localMappingValue) GetGetterSource() string {
+	return v.name
+}
+
+func (v *localMappingValue) CanGet() bool {
+	return true
+}
+
+func (v *localMappingValue) GetSetterSource(valueSource string) string {
+	return fmt.Sprintf("%s = %s", v.name, valueSource)
+}
+
+func (v *localMappingValue) CanSet() bool {
+	return true
+}
+
+func (v *localMappingValue) Type() types.Type {
+	return v.typ
+}
+
+var _ MappingValue = (*objectPropertyMappingValue)(nil)
+
+type objectPropertyMappingValue struct {
+	base              string
+	exportedFieldName string
+	exportedFieldType types.Type
+	getter            *types.Func
+	setter            *types.Func
+}
+
+// NewObjectPropertyMappingValue creates a new [MappingValue] related to
+// the given object.
+func NewObjectPropertyMappingValue(base string, named *types.Named, name string, ignoreCase bool) (MappingValue, bool) {
+	baseName := base
+	parts := strings.SplitN(name, ".", -1)
+	if len(parts) > 1 {
+		baseName = base + "." + strings.Join(parts[:len(parts)-1], ".")
+	}
+	st, ok := GetStructType(named)
+	if ok {
+		f, ok := GetField(st, name, ignoreCase)
+		if ok && f.Exported() {
+			return &objectPropertyMappingValue{
+				base:              baseName,
+				exportedFieldName: f.Name(),
+				exportedFieldType: f.Type(),
+			}, true
+		}
+	}
+
+	ret := &objectPropertyMappingValue{
+		base: base,
+	}
+
+	setter, ok := GetMethod(named, "Set"+name, ignoreCase)
+	if ok && setter.Exported() {
+		ret.setter = setter
+	}
+	getter, ok := GetMethod(named, name, ignoreCase)
+	if ok && getter.Exported() {
+		ret.getter = getter
+	}
+	if ret.CanGet() || ret.CanSet() {
+		return ret, true
+	}
+	return nil, false
+}
+
+func (v *objectPropertyMappingValue) DisplayName() string {
+	if len(v.exportedFieldName) != 0 {
+		return v.base + "." + v.exportedFieldName
+	}
+	if v.getter != nil {
+		return v.base + "." + v.getter.Name() + "()"
+	}
+	if v.setter != nil {
+		return fmt.Sprintf("%s.%s(%s)", v.base, v.setter.Name(), "v")
+	}
+	return ""
+}
+
+func (v *objectPropertyMappingValue) GetGetterSource() string {
+	if len(v.exportedFieldName) != 0 {
+		return v.base + "." + v.exportedFieldName
+	}
+	if v.getter != nil {
+		return v.base + "." + v.getter.Name() + "()"
+	}
+	return ""
+}
+
+func (v *objectPropertyMappingValue) CanGet() bool {
+	return len(v.exportedFieldName) > 0 || v.getter != nil
+}
+
+func (v *objectPropertyMappingValue) GetSetterSource(valueSource string) string {
+	if len(v.exportedFieldName) != 0 {
+		return fmt.Sprintf("%s.%s = %s", v.base, v.exportedFieldName, valueSource)
+	}
+	if v.setter != nil {
+		return fmt.Sprintf("%s.%s(%s)", v.base, v.setter.Name(), valueSource)
+	}
+	return ""
+}
+
+func (v *objectPropertyMappingValue) CanSet() bool {
+	return len(v.exportedFieldName) > 0 || v.setter != nil
+}
+
+func (v *objectPropertyMappingValue) Type() types.Type {
+	if len(v.exportedFieldName) != 0 {
+		return v.exportedFieldType
+	}
+	if v.getter != nil {
+		return v.getter.Type().(*types.Signature).Results().At(0).Type()
+	}
+	if v.setter != nil {
+		return v.setter.Type().(*types.Signature).Params().At(0).Type()
+	}
+	return nil
+}
+
 // Printer writes generated source codes.
 // If dest already exists, Printer appends a new data
 // to the end of it.
@@ -780,16 +944,26 @@ func genMapFuncBody(printer Printer,
 	if !ok {
 		return fmt.Errorf("%s is not a struct", source.Type())
 	}
+	sourceNamed, ok := GetNamedType(source.Type())
+	if !ok {
+		return fmt.Errorf("%s is not a named type", source.Type())
+	}
+
 	destStruct, ok := GetStructType(dest.Type())
 	if !ok {
 		return fmt.Errorf("%s is not a struct", dest.Type())
+	}
+	destNamed, ok := GetNamedType(dest.Type())
+	if !ok {
+		return fmt.Errorf("%s is not a named type", dest.Type())
 	}
 
 	destName, ok := mapping.Fields.Pair(typ, "*")
 	if ok { // embedded
 		destField, _ := GetField(destStruct, destName, mapping.IgnoreCase)
-		err := genFieldMapStmts(printer, sourceNameBase, destField.Type(),
-			destNameBase+"."+destName, destField.Type(), mapping, mctx)
+		err := genFieldMapStmts(printer,
+			NewLocalMappingValue(sourceNameBase, destField.Type()),
+			NewLocalMappingValue(destNameBase+"."+destName, destField.Type()), mapping, mctx)
 		if err != nil {
 			return err
 		}
@@ -799,23 +973,22 @@ func genMapFuncBody(printer Printer,
 			if mapping.Ignores.Contains(typ, sourceField.Name()) {
 				continue
 			}
-			var destFieldType types.Type
-			var destFieldNameBase string
+			sourceValue, ok := NewObjectPropertyMappingValue(sourceNameBase, sourceNamed, sourceField.Name(), mapping.IgnoreCase)
+			if !ok || !sourceValue.CanGet() {
+				continue
+			}
+
+			var destValue MappingValue
 			destName, ok := mapping.Fields.Pair(typ, sourceField.Name())
 			if ok { // map explicitly
-				found := false
+				var found bool
 				if destName == "*" { // embedded
 					found = true
-					destFieldType = sourceField.Type()
-					destFieldNameBase = destNameBase
+					destValue = NewLocalMappingValue(destNameBase, sourceValue.Type())
 				} else {
+					destValue, found = NewObjectPropertyMappingValue(destNameBase, destNamed, destName, mapping.IgnoreCase)
+					found = found && destValue.CanSet()
 					parts := strings.SplitN(destName, ".", -1)
-					destField, ok := GetField(destStruct, destName, mapping.IgnoreCase)
-					if ok {
-						found = true
-						destFieldType = destField.Type()
-						destFieldNameBase = destNameBase + "." + destName
-					}
 					if len(parts) > 1 {
 						for i := 1; i < len(parts); i++ {
 							nestName := strings.Join(parts[:i], ".")
@@ -829,15 +1002,14 @@ func genMapFuncBody(printer Printer,
 					}
 				}
 				if !found {
-					return fmt.Errorf("Could not map a field: '%s.%s.%s' to '%s'",
-						source.Pkg().Name(), source.Name(), sourceField.Name(), destName)
+					return fmt.Errorf("Could not map a field: '%s.%s' to '%s'",
+						source.Pkg().Name(), sourceValue.GetGetterSource(), destName)
 				}
 			} else if !mapping.ExplicitOnly { // map implicitly
-				destField, ok := GetField(destStruct, sourceField.Name(), mapping.IgnoreCase)
-				if ok {
-					destFieldType = destField.Type()
-					destFieldNameBase = destNameBase + "." + destField.Name()
-				} else {
+				var found bool
+				destValue, found = NewObjectPropertyMappingValue(destNameBase, destNamed, sourceField.Name(), mapping.IgnoreCase)
+				found = found && destValue.CanSet()
+				if !found {
 					if mapping.AllowUnmapped {
 						LogFunc(LogLevelDebug, "%s.%s.%s is ignored", source.Pkg().Name(), source.Name(), sourceField.Name())
 						continue
@@ -848,8 +1020,7 @@ func genMapFuncBody(printer Printer,
 				continue
 			}
 
-			err := genFieldMapStmts(printer, sourceNameBase+"."+sourceField.Name(),
-				sourceField.Type(), destFieldNameBase, destFieldType, mapping, mctx)
+			err := genFieldMapStmts(printer, sourceValue, destValue, mapping, mctx)
 			if err != nil {
 				return err
 			}
@@ -883,58 +1054,76 @@ func genMapFuncBody(printer Printer,
 }
 
 func genFieldMapStmts(printer Printer,
-	sourceName string, sourceType types.Type,
-	destName string, destType types.Type,
+	sourceValue MappingValue, destValue MappingValue,
 	mapping *ObjectMapping,
 	mctx *MappingContext) error {
 	p := printer.P
+	sourceType := sourceValue.Type()
+	destType := destValue.Type()
+
 	mctx.AddMapperFuncField(sourceType, destType)
 	switch typ := sourceType.(type) {
 	case *types.Array:
 		dtype, ok := destType.(*types.Array)
 		if !ok {
-			return fmt.Errorf("type mismatch: %s and %s should be an array", sourceName, destName)
+			return fmt.Errorf("type mismatch: %s and %s should be an array",
+				sourceValue.DisplayName(), destValue.DisplayName())
 		}
 		// TODO: test slice and array and array size
 		// TODO: support a conversion slice and array?
 
+		a := mctx.NextVarCount()
+		p("var arr%d %s", a, GetSource(destValue.Type(), mctx))
 		i := mctx.NextVarCount()
-		p("for i%d, elm := range %s {", i, sourceName)
+		p("for i%d, elm := range %s {", i, sourceValue.GetGetterSource())
 		n := mctx.NextVarCount()
 		p("\t\tvar tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
-			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
+		if err := genFieldMapStmts(printer,
+			NewLocalMappingValue("elm", typ.Elem()),
+			NewLocalMappingValue(fmt.Sprintf("tmp%d", n), dtype.Elem()), mapping, mctx); err != nil {
 			return err
 		}
-		genAssignStmt(printer, fmt.Sprintf("tmp%d", n), typ.Elem(), fmt.Sprintf("%s[i%d]", destName, i), dtype.Elem(), mctx)
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("tmp%d", n), typ.Elem()),
+			NewLocalMappingValue(fmt.Sprintf("arr%d[i%d]", a, i), dtype.Elem()),
+			mctx)
 		p("}")
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("arr%d", a), destValue.Type()),
+			destValue, mctx)
 	case *types.Slice:
 		dtype, ok := destType.(*types.Slice)
 		if !ok {
-			return fmt.Errorf("type mismatch: %s and %s should be a slice", sourceName, destName)
+			return fmt.Errorf("type mismatch: %s and %s should be a slice",
+				sourceValue.DisplayName(), destValue.DisplayName())
 		}
 		// TODO: test slice and array and array size
 		// TODO: support a conversion slice and array?
 
-		p("if %s == nil {", sourceName)
-		switch mapping.NilMap {
+		s := mctx.NextVarCount()
+		p("var sl%d %s", s, GetSource(destValue.Type(), mctx))
+		p("if %s == nil {", sourceValue.GetGetterSource())
+		switch mapping.NilSlice {
 		case NilCollectionAsNil:
-			p("%s = nil", destName)
+			p(destValue.GetSetterSource("nil"))
 		case NilCollectionAsEmpty:
-			p("%s = make(%s, 0)", destName, GetSource(destType, mctx))
+			p(destValue.GetSetterSource("make(" + GetSource(destType, mctx) + ", 0)"))
 		default:
 		}
 		p("} else {")
 
-		p("for _, elm := range %s {", sourceName)
+		p("for _, elm := range %s {", sourceValue.GetGetterSource())
 		n := mctx.NextVarCount()
 		p("var tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
-			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
+		if err := genFieldMapStmts(printer, NewLocalMappingValue("elm", typ.Elem()),
+			NewLocalMappingValue(fmt.Sprintf("tmp%d", n), dtype.Elem()), mapping, mctx); err != nil {
 			return err
 		}
-		p("%s = append(%s, tmp%d)", destName, destName, n)
+		p("sl%d = append(sl%d, tmp%d)", s, s, n)
 		p("}")
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("sl%d", s), destValue.Type()),
+			destValue, mctx)
 		p("}")
 	case *types.Map:
 		// TODO: support a conversion map and struct?
@@ -943,40 +1132,48 @@ func genFieldMapStmts(printer Printer,
 			return fmt.Errorf("type mismatch: %s and %s should be a map", sourceType, destType)
 		}
 
-		p("if %s == nil {", sourceName)
+		p("if %s == nil {", sourceValue.GetGetterSource())
 		switch mapping.NilMap {
 		case NilCollectionAsNil:
-			p("%s = nil", destName)
+			p(destValue.GetSetterSource("nil"))
 		case NilCollectionAsEmpty:
-			p("%s = make(%s)", destName, GetSource(destType, mctx))
+			p(destValue.GetSetterSource("make(" + GetSource(destType, mctx) + ")"))
 		default:
 		}
 		p("} else {")
 
-		p("%s = make(%s)", destName, GetSource(destType, mctx))
-		p("for key, elm := range %s {", sourceName)
+		m := mctx.NextVarCount()
+		p("map%d := make(%s)", m, GetSource(destType, mctx))
+		p("for key, elm := range %s {", sourceValue.GetGetterSource())
 		n := mctx.NextVarCount()
 		p("var tmp%d %s", n, GetSource(dtype.Elem(), mctx))
-		if err := genFieldMapStmts(printer, "elm", typ.Elem(),
-			fmt.Sprintf("tmp%d", n), dtype.Elem(), mapping, mctx); err != nil {
+		if err := genFieldMapStmts(printer, NewLocalMappingValue("elm", typ.Elem()),
+			NewLocalMappingValue(fmt.Sprintf("tmp%d", n), dtype.Elem()),
+			mapping, mctx); err != nil {
 			return err
 		}
-		genAssignStmt(printer, fmt.Sprintf("tmp%d", n), typ.Elem(), fmt.Sprintf("%s[key]", destName), dtype.Elem(), mctx)
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("tmp%d", n), typ.Elem()),
+			NewLocalMappingValue(fmt.Sprintf("map%d[key]", m), dtype.Elem()), mctx)
 		p("}")
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("map%d", m), destValue.Type()),
+			destValue, mctx)
 		p("}")
 	case *types.Chan:
-		LogFunc(LogLevelInfo, "chan type %s ignored", sourceName)
+		LogFunc(LogLevelInfo, "chan type %s ignored", sourceValue.DisplayName())
 	default:
-		genAssignStmt(printer, sourceName, sourceType, destName, destType, mctx)
+		genAssignStmt(printer, sourceValue, destValue, mctx)
 	}
 	return nil
 }
 
 func genAssignStmt(printer Printer,
-	sourceName string, sourceType types.Type,
-	destName string, destType types.Type,
-	mctx *MappingContext) {
+	sourceValue MappingValue, destValue MappingValue, mctx *MappingContext) {
 	p := printer.P
+	sourceType := sourceValue.Type()
+	sourceSig := sourceValue.GetGetterSource()
+	destType := destValue.Type()
 
 	sourceTypeName := GetQualifiedTypeName(sourceType)
 	_, sourceIsPointer := sourceType.(*types.Pointer)
@@ -989,13 +1186,13 @@ func genAssignStmt(printer Printer,
 	argName := ""
 	switch {
 	case sourceIsPointerPreferable && sourceIsPointer:
-		argName = sourceName
+		argName = sourceSig
 	case sourceIsPointerPreferable && !sourceIsPointer:
-		argName = "&" + sourceName
+		argName = "&(" + sourceSig + ")"
 	case !sourceIsPointerPreferable && sourceIsPointer:
-		argName = "*" + sourceName
+		argName = "*(" + sourceSig + ")"
 	case !sourceIsPointerPreferable && !sourceIsPointer:
-		argName = sourceName
+		argName = sourceSig
 	}
 
 	mf := mctx.GetMapperFuncFieldName(sourceType, destType)
@@ -1006,13 +1203,13 @@ func genAssignStmt(printer Printer,
 		p("  } else {")
 		switch {
 		case destIsPointer && destIsPointerPreferable:
-			p("%s = v", destName)
+			p(destValue.GetSetterSource("v"))
 		case destIsPointer && !destIsPointerPreferable:
-			p("%s = &v", destName)
+			p(destValue.GetSetterSource("&v"))
 		case !destIsPointer && destIsPointerPreferable:
-			p("%s = *v", destName)
+			p(destValue.GetSetterSource("*v"))
 		case !destIsPointer && !destIsPointerPreferable:
-			p("%s = v", destName)
+			p(destValue.GetSetterSource("v"))
 		}
 		p("  }")
 		p("}")
@@ -1021,21 +1218,22 @@ func genAssignStmt(printer Printer,
 	if sourceTypeName == destTypeName {
 		switch {
 		case sourceIsPointer && destIsPointer:
-			p("%s = %s", destName, sourceName)
+			p(destValue.GetSetterSource(sourceSig))
 		case sourceIsPointer && !destIsPointer:
-			p("%s = *%s", destName, sourceName)
+			p(destValue.GetSetterSource("*(" + sourceSig + ")"))
 		case !sourceIsPointer && destIsPointer:
-			p("%s = &%s", destName, sourceName)
+			p(destValue.GetSetterSource("&(" + sourceSig + ")"))
 		case !sourceIsPointer && !destIsPointer:
-			p("%s = %s", destName, sourceName)
+			p(destValue.GetSetterSource(sourceSig))
 
 		}
 		return
 	}
 
 	if CanCast(sourceType, destType) {
-		genAssignStmt(printer, fmt.Sprintf("%s(%s)", GetSource(destType, mctx), sourceName),
-			destType, destName, destType, mctx)
+		genAssignStmt(printer,
+			NewLocalMappingValue(fmt.Sprintf("%s(%s)", GetSource(destType, mctx), sourceSig), destType),
+			destValue, mctx)
 		return
 	}
 
