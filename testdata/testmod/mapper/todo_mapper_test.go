@@ -1,6 +1,7 @@
 package mapper_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ func mustTime(s string) time.Time {
 func TestTodoMapper(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringMapper(mappers)
+	ctx := context.TODO()
 
 	obj, err := mappers.Get("TodoMapper")
 	if err != nil {
@@ -51,7 +53,7 @@ func TestTodoMapper(t *testing.T) {
 	}
 	source.SetPrivateValue(10)
 
-	entity, err := todoMapper.TodoModelToTodo(source)
+	entity, err := todoMapper.TodoModelToTodo(ctx, source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +83,7 @@ func TestTodoMapper(t *testing.T) {
 
 	// entity.ID=in64, model.Id=int(32), so ID can not be casted into a dest type
 	entity.ID = 1
-	reversed, err := todoMapper.TodoToTodoModel(entity)
+	reversed, err := todoMapper.TodoToTodoModel(ctx, entity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ type todoMapperHelper struct {
 
 var _ TodoMapperHelper = &todoMapperHelper{}
 
-func (h *todoMapperHelper) TodoModelToTodo(source *model.TodoModel, dest *domain.Todo) error {
+func (h *todoMapperHelper) TodoModelToTodo(ctx context.Context, source *model.TodoModel, dest *domain.Todo) error {
 	if source.ValidateOnly {
 		if dest.Attributes == nil {
 			dest.Attributes = map[string][]string{}
@@ -111,7 +113,7 @@ func (h *todoMapperHelper) TodoModelToTodo(source *model.TodoModel, dest *domain
 	return nil
 }
 
-func (h *todoMapperHelper) TodoToTodoModel(source *domain.Todo, dest *model.TodoModel) error {
+func (h *todoMapperHelper) TodoToTodoModel(ctx context.Context, source *domain.Todo, dest *model.TodoModel) error {
 	if source.Attributes == nil {
 		return nil
 	}
@@ -124,6 +126,7 @@ func (h *todoMapperHelper) TodoToTodoModel(source *domain.Todo, dest *model.Todo
 func TestMapperHelper(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringMapper(mappers)
+	ctx := context.TODO()
 
 	mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
 		return &todoMapperHelper{}, nil
@@ -150,7 +153,7 @@ func TestMapperHelper(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err := todoMapper.TodoModelToTodo(source)
+	entity, err := todoMapper.TodoModelToTodo(ctx, source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,6 +183,7 @@ func TestMapperHelper(t *testing.T) {
 func TestNilCollection(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringMapper(mappers)
+	ctx := context.TODO()
 
 	obj, err := mappers.Get("TodoMapperEmpty")
 	if err != nil {
@@ -199,7 +203,7 @@ func TestNilCollection(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err := todoMapper.TodoModelToTodo(source)
+	entity, err := todoMapper.TodoModelToTodo(ctx, source)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +236,7 @@ func TestNilCollection(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err = todoMapper.TodoModelToTodo(source)
+	entity, err = todoMapper.TodoModelToTodo(ctx, source)
 	if err != nil {
 		t.Fatal(err)
 	}

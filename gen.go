@@ -755,16 +755,20 @@ func (g *generator) Generate() error {
 			aArgSource := GetPreferableTypeSource(a.Type(), mctx)
 			bArgSource := GetPreferableTypeSource(b.Type(), mctx)
 			p("type %sHelper interface {", mapping.Name)
-			p("  %s(%s, %s) error", mapping.MethodName(OperandA), aArgSource, bArgSource)
+			p("  %s(%s.Context, %s, %s) error", mapping.MethodName(OperandA),
+				mctx.GetImportAlias("context"), aArgSource, bArgSource)
 			if mapping.Bidirectional {
-				p("  %s(%s, %s) error", mapping.MethodName(OperandB), bArgSource, aArgSource)
+				p("  %s(%s.Context, %s, %s) error", mapping.MethodName(OperandB),
+					mctx.GetImportAlias("context"), bArgSource, aArgSource)
 			}
 			p("}")
 			p("")
 			p("type %s interface {", mapping.Name)
-			p("%s(%s) (%s, error) ", mapping.MethodName(OperandA), aArgSource, bArgSource)
+			p("%s(%s.Context, %s) (%s, error) ", mapping.MethodName(OperandA),
+				mctx.GetImportAlias("context"), aArgSource, bArgSource)
 			if mapping.Bidirectional {
-				p("%s(%s) (%s, error) ", mapping.MethodName(OperandB), bArgSource, aArgSource)
+				p("%s(%s.Context, %s) (%s, error) ", mapping.MethodName(OperandB),
+					mctx.GetImportAlias("context"), bArgSource, aArgSource)
 			}
 			p("}")
 			p("")
@@ -917,15 +921,15 @@ func genMapFunc(printer Printer, mapping *Mapping,
 	source types.Object, dest types.Object, typ OperandType, mctx *MappingContext) error {
 	p := printer.P
 
-	p("func (m *%s) %s(source *%s) (*%s, error) {",
-		mapping.PrivateName(), mapping.MethodName(typ),
+	p("func (m *%s) %s(ctx %s.Context, source *%s) (*%s, error) {",
+		mapping.PrivateName(), mapping.MethodName(typ), mctx.GetImportAlias("context"),
 		GetSource(source.Type(), mctx), GetSource(dest.Type(), mctx))
 	p("  dest := &%s{}", GetSource(dest.Type(), mctx))
 	if err := genMapFuncBody(printer, source, "source", dest, "dest", &mapping.ObjectMapping, typ, mctx); err != nil {
 		return err
 	}
 	p("  if m.helper != nil {")
-	p("     if err := m.helper.%s(source, dest); err != nil {", mapping.MethodName(typ))
+	p("     if err := m.helper.%s(ctx, source, dest); err != nil {", mapping.MethodName(typ))
 	p("       return nil, err")
 	p("     }")
 	p("  }")
@@ -1198,7 +1202,7 @@ func genAssignStmt(printer Printer,
 	mf := mctx.GetMapperFuncFieldName(sourceType, destType)
 	if mf != nil {
 		p("if m.%s != nil {", mf.FieldName)
-		p("  if v, err := m.%s(%s); err != nil {", mf.FieldName, argName)
+		p("  if v, err := m.%s(ctx, %s); err != nil {", mf.FieldName, argName)
 		p("    return nil, err")
 		p("  } else {")
 		switch {

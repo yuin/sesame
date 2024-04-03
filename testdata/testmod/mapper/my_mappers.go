@@ -1,11 +1,14 @@
 package mapper
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type TimeStringMapper struct {
 }
 
-func (m *TimeStringMapper) StringToTime(source string) (*time.Time, error) {
+func (m *TimeStringMapper) StringToTime(ctx context.Context, source string) (*time.Time, error) {
 	t, err := time.Parse(time.RFC3339, source)
 	if err != nil {
 		return nil, err
@@ -13,7 +16,7 @@ func (m *TimeStringMapper) StringToTime(source string) (*time.Time, error) {
 	return &t, nil
 }
 
-func (m *TimeStringMapper) TimeToString(source *time.Time) (string, error) {
+func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time) (string, error) {
 	return source.Format(time.RFC3339), nil
 }
 

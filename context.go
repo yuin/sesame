@@ -34,14 +34,15 @@ type MapperFuncField struct {
 
 // Signature returns a function signature.
 func (m *MapperFuncField) Signature(mctx *MappingContext) string {
-	return fmt.Sprintf("func(%s) (%s, error)",
+	return fmt.Sprintf("func(%s.Context, %s) (%s, error)",
+		mctx.GetImportAlias("context"),
 		GetPreferableTypeSource(m.Source, mctx),
 		GetPreferableTypeSource(m.Dest, mctx))
 }
 
 // NewMappingContext returns new [MappingContext] .
 func NewMappingContext(absPkgPath string) *MappingContext {
-	return &MappingContext{
+	mctx := &MappingContext{
 		absPkgPath:       absPkgPath,
 		aliasCount:       0,
 		aliasBase:        "pkg",
@@ -49,6 +50,8 @@ func NewMappingContext(absPkgPath string) *MappingContext {
 		mapperFuncFields: []*MapperFuncField{},
 		mapperFuncCount:  0,
 	}
+	mctx.AddImport("context")
+	return mctx
 }
 
 // AbsolutePackagePath returns na absolute package path of a file will be
