@@ -176,7 +176,7 @@ func IsPointerPreferableType(typ types.Type) bool {
 	}
 
 	name := ""
-	if v, ok := typ.(interface {
+	if v, ok := typ.Underlying().(interface {
 		Name() string
 	}); ok {
 		name = v.Name()
@@ -210,7 +210,7 @@ func IsBuiltinType(typ types.Type) bool {
 		return IsBuiltinType(ptyp.Elem())
 	}
 	name := ""
-	if v, ok := typ.(interface {
+	if v, ok := typ.Underlying().(interface {
 		Name() string
 	}); ok {
 		name = v.Name()
