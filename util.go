@@ -187,7 +187,6 @@ func IsPointerPreferableType(typ types.Type) bool {
 	return true
 }
 
-// GetPreferableTypeSource returns a string representation with an alias package name.
 // GetPreferableTypeSource returns
 //   - If type is defined in the universe, a type without pointer
 //   - Otherwise, a type with pointer
@@ -202,6 +201,14 @@ func GetPreferableTypeSource(typ types.Type, mctx *MappingContext) string {
 		}
 	}
 	return GetSource(typ, mctx)
+}
+
+// GetPointerTypeSource returns a source code of a type with a pointer.
+func GetPointerTypeSource(typ types.Type, mctx *MappingContext) string {
+	if ptyp, ok := typ.(*types.Pointer); ok {
+		return GetSource(ptyp.Elem(), mctx)
+	}
+	return "*" + GetSource(typ, mctx)
 }
 
 // IsBuiltinType returns true if given type is defined in the universe.

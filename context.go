@@ -34,10 +34,10 @@ type MapperFuncField struct {
 
 // Signature returns a function signature.
 func (m *MapperFuncField) Signature(mctx *MappingContext) string {
-	return fmt.Sprintf("func(%s.Context, %s) (%s, error)",
+	return fmt.Sprintf("func(%s.Context, %s, %s) error",
 		mctx.GetImportAlias("context"),
 		GetPreferableTypeSource(m.Source, mctx),
-		GetPreferableTypeSource(m.Dest, mctx))
+		GetPointerTypeSource(m.Dest, mctx))
 }
 
 // NewMappingContext returns new [MappingContext] .

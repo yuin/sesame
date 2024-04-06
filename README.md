@@ -135,8 +135,8 @@ type TodoMapperHelper interface {
 }
 
 type TodoMapper interface {
-	TodoModelToTodo(pkg00000.Context, *pkg00001.TodoModel) (*pkg00002.Todo, error)
-	TodoToTodoModel(pkg00000.Context, *pkg00002.Todo) (*pkg00001.TodoModel, error)
+	TodoModelToTodo(pkg00000.Context, *pkg00001.TodoModel, *pkg00002.Todo) error
+	TodoToTodoModel(pkg00000.Context, *pkg00002.Todo, *pkg00001.TodoModel) error
 }
 
 // ... (TodoMapper default implementation)
@@ -162,7 +162,8 @@ Mapping codes look like the following:
        t.Fatal(err)
    }
    todoMapper, _ := obj.(TodoMapper)
-   entity, err := todoMapper.ModelToEntity(ctx, model) 
+   var entity Todo
+   err := todoMapper.ModelToEntity(ctx, model, &entity) 
    ```
 
 ### Custom mappers
@@ -180,16 +181,18 @@ Example: `string <-> time.Time` mapper
 type TimeStringMapper struct {
 }
 
-func (m *TimeStringMapper) StringToTime(ctx context.Context, source string) (*time.Time, error) {
-    t, err := time.Parse(time.RFC3339, source)
-    if err != nil {
-        return nil, err
-    }
-    return &t, nil
+func (m *TimeStringMapper) StringToTime(ctx context.Context, source string, dest *time.Time) error {
+	t, err := time.Parse(time.RFC3339, source)
+	if err != nil {
+		return err
+	}
+	*dest = t
+	return nil
 }
 
-func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time) (string, error) {
-    return source.Format(time.RFC3339), nil
+func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time, dest *string) error {
+	*dest = source.Format(time.RFC3339)
+	return nil
 }
 
 type Mappers interface {
@@ -224,12 +227,14 @@ func AddTimeToStringMapper(mappers Mappers) {
 
 `Mappers.AddMapperFuncFactory` takes qualified type names as arguments. A qualified type name is `FULL_PACKAGE_PATH#TYPENAME`(i.e. `time#Time`, `example.com/testmod/domain#Todo`).
 
-Argument types and return types in custom mapping functions must be a
+Source argument types in custom mapping functions must be a
 
 - Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
 - Pointer: others
 
-So `func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time) (string, error)` defines source type as a pointer(`*time.Time`) and return type as a raw value(`string`) .
+Destination arguments are pointers.
+
+So `func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time, dest *string) error` defines source type as a pointer(`*time.Time`).
 
 `Mappers.Add` finds given mapper methods name like 'XxxToYyy' and calls `AddMapperFuncFactory`.
 

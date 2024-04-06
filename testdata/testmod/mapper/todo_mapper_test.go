@@ -53,7 +53,8 @@ func TestTodoMapper(t *testing.T) {
 	}
 	source.SetPrivateValue(10)
 
-	entity, err := todoMapper.TodoModelToTodo(ctx, source)
+	var entity domain.Todo
+	err = todoMapper.TodoModelToTodo(ctx, source, &entity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestTodoMapper(t *testing.T) {
 	}
 	expected.SetPrivateValue(10)
 
-	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
+	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 	if expected.PrivateValue() != entity.PrivateValue() {
@@ -83,14 +84,15 @@ func TestTodoMapper(t *testing.T) {
 
 	// entity.ID=in64, model.Id=int(32), so ID can not be casted into a dest type
 	entity.ID = 1
-	reversed, err := todoMapper.TodoToTodoModel(ctx, entity)
+	var reversed model.TodoModel
+	err = todoMapper.TodoToTodoModel(ctx, &entity, &reversed)
 	if err != nil {
 		t.Fatal(err)
 	}
 	source.ValidateOnly = false
 	source.Id = 0
 
-	if diff := cmp.Diff(source, reversed, todoModelIgnores); len(diff) != 0 {
+	if diff := cmp.Diff(source, &reversed, todoModelIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 	if source.PrivateValue() != reversed.PrivateValue() {
@@ -153,7 +155,8 @@ func TestMapperHelper(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err := todoMapper.TodoModelToTodo(ctx, source)
+	var entity domain.Todo
+	err = todoMapper.TodoModelToTodo(ctx, source, &entity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +177,7 @@ func TestMapperHelper(t *testing.T) {
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
+	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
@@ -203,7 +206,8 @@ func TestNilCollection(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err := todoMapper.TodoModelToTodo(ctx, source)
+	var entity domain.Todo
+	err = todoMapper.TodoModelToTodo(ctx, source, &entity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +222,7 @@ func TestNilCollection(t *testing.T) {
 		UpdatedAt:  mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
+	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 
@@ -236,7 +240,8 @@ func TestNilCollection(t *testing.T) {
 		ValidateOnly: true,
 	}
 
-	entity, err = todoMapper.TodoModelToTodo(ctx, source)
+	entity = domain.Todo{}
+	err = todoMapper.TodoModelToTodo(ctx, source, &entity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +258,7 @@ func TestNilCollection(t *testing.T) {
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
 	}
 
-	if diff := cmp.Diff(expected, entity, todoEntityIgnores); len(diff) != 0 {
+	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
 		t.Errorf("Compare value is mismatch(-:expected, +:actual) :%s\n", diff)
 	}
 

@@ -390,6 +390,9 @@ type MappingValue interface {
 	// CanGet returns true if this value is readable.
 	CanGet() bool
 
+	// CanAddr returns true if this value with getter is addressable.
+	CanAddr() bool
+
 	// GetSetterSource returns a source code of the setter.
 	GetSetterSource(valueSource string) string
 
@@ -428,6 +431,10 @@ func (v *localMappingValue) GetGetterSource() string {
 }
 
 func (v *localMappingValue) CanGet() bool {
+	return true
+}
+
+func (v *localMappingValue) CanAddr() bool {
 	return true
 }
 
@@ -512,6 +519,19 @@ func (v *objectPropertyMappingValue) GetGetterSource() string {
 		return v.base + "." + v.getter.Name() + "()"
 	}
 	return ""
+}
+
+func (v *objectPropertyMappingValue) CanAddr() bool {
+	if len(v.exportedFieldName) != 0 {
+		return true
+	}
+	if v.getter != nil {
+		typ := v.getter.Type().(*types.Signature).Results().At(0).Type()
+		if _, ok := typ.(*types.Pointer); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *objectPropertyMappingValue) CanGet() bool {
@@ -753,7 +773,7 @@ func (g *generator) Generate() error {
 			a := elem.A
 			b := elem.B
 			aArgSource := GetPreferableTypeSource(a.Type(), mctx)
-			bArgSource := GetPreferableTypeSource(b.Type(), mctx)
+			bArgSource := GetPointerTypeSource(b.Type(), mctx)
 			p("type %sHelper interface {", mapping.Name)
 			p("  %s(%s.Context, %s, %s) error", mapping.MethodName(OperandA),
 				mctx.GetImportAlias("context"), aArgSource, bArgSource)
@@ -764,10 +784,10 @@ func (g *generator) Generate() error {
 			p("}")
 			p("")
 			p("type %s interface {", mapping.Name)
-			p("%s(%s.Context, %s) (%s, error) ", mapping.MethodName(OperandA),
+			p("%s(%s.Context, %s, %s) error", mapping.MethodName(OperandA),
 				mctx.GetImportAlias("context"), aArgSource, bArgSource)
 			if mapping.Bidirectional {
-				p("%s(%s.Context, %s) (%s, error) ", mapping.MethodName(OperandB),
+				p("%s(%s.Context, %s, %s) error", mapping.MethodName(OperandB),
 					mctx.GetImportAlias("context"), bArgSource, aArgSource)
 			}
 			p("}")
@@ -921,19 +941,18 @@ func genMapFunc(printer Printer, mapping *Mapping,
 	source types.Object, dest types.Object, typ OperandType, mctx *MappingContext) error {
 	p := printer.P
 
-	p("func (m *%s) %s(ctx %s.Context, source *%s) (*%s, error) {",
+	p("func (m *%s) %s(ctx %s.Context, source *%s, dest *%s) error {",
 		mapping.PrivateName(), mapping.MethodName(typ), mctx.GetImportAlias("context"),
 		GetSource(source.Type(), mctx), GetSource(dest.Type(), mctx))
-	p("  dest := &%s{}", GetSource(dest.Type(), mctx))
 	if err := genMapFuncBody(printer, source, "source", dest, "dest", &mapping.ObjectMapping, typ, mctx); err != nil {
 		return err
 	}
 	p("  if m.helper != nil {")
 	p("     if err := m.helper.%s(ctx, source, dest); err != nil {", mapping.MethodName(typ))
-	p("       return nil, err")
+	p("       return err")
 	p("     }")
 	p("  }")
-	p("  return dest, nil")
+	p("  return nil")
 	p("}")
 
 	return nil
@@ -1184,39 +1203,53 @@ func genAssignStmt(printer Printer,
 	sourceIsPointerPreferable := IsPointerPreferableType(sourceType)
 	destTypeName := GetQualifiedTypeName(destType)
 	_, destIsPointer := destType.(*types.Pointer)
-	destIsPointerPreferable := IsPointerPreferableType(destType)
 
 	// Try to execute custom mapper
-	argName := ""
-	switch {
-	case sourceIsPointerPreferable && sourceIsPointer:
-		argName = sourceSig
-	case sourceIsPointerPreferable && !sourceIsPointer:
-		argName = "&(" + sourceSig + ")"
-	case !sourceIsPointerPreferable && sourceIsPointer:
-		argName = "*(" + sourceSig + ")"
-	case !sourceIsPointerPreferable && !sourceIsPointer:
-		argName = sourceSig
-	}
-
 	mf := mctx.GetMapperFuncFieldName(sourceType, destType)
 	if mf != nil {
 		p("if m.%s != nil {", mf.FieldName)
-		p("  if v, err := m.%s(ctx, %s); err != nil {", mf.FieldName, argName)
-		p("    return nil, err")
-		p("  } else {")
+		var argName string
 		switch {
-		case destIsPointer && destIsPointerPreferable:
-			p(destValue.GetSetterSource("v"))
-		case destIsPointer && !destIsPointerPreferable:
-			p(destValue.GetSetterSource("&v"))
-		case !destIsPointer && destIsPointerPreferable:
-			p(destValue.GetSetterSource("*v"))
-		case !destIsPointer && !destIsPointerPreferable:
-			p(destValue.GetSetterSource("v"))
+		case sourceIsPointerPreferable && sourceIsPointer:
+			argName = sourceSig
+		case sourceIsPointerPreferable && !sourceIsPointer:
+			if sourceValue.CanAddr() {
+				argName = "&(" + sourceSig + ")"
+			} else {
+				p("s := %s", sourceSig)
+				argName = "&s"
+			}
+		case !sourceIsPointerPreferable && sourceIsPointer:
+			argName = "*(" + sourceSig + ")"
+		case !sourceIsPointerPreferable && !sourceIsPointer:
+			argName = sourceSig
 		}
-		p("  }")
-		p("}")
+
+		var destName string
+		if destValue.CanAddr() {
+			if destIsPointer {
+				destName = destValue.GetGetterSource()
+			} else {
+				destName = "&(" + destValue.GetGetterSource() + ")"
+			}
+		} else {
+			p("var v %s", GetSource(destType, mctx))
+			if destIsPointer {
+				destName = "v"
+			} else {
+				destName = "&v"
+			}
+		}
+		p("  if err := m.%s(ctx, %s, %s); err != nil {", mf.FieldName, argName, destName)
+		p("    return err")
+		if destValue.CanAddr() {
+			p("}")
+		} else {
+			p("  } else {")
+			p(destValue.GetSetterSource("v"))
+			p("  }")
+		}
+		p("} else { ")
 	}
 
 	if sourceTypeName == destTypeName {
@@ -1226,10 +1259,19 @@ func genAssignStmt(printer Printer,
 		case sourceIsPointer && !destIsPointer:
 			p(destValue.GetSetterSource("*(" + sourceSig + ")"))
 		case !sourceIsPointer && destIsPointer:
-			p(destValue.GetSetterSource("&(" + sourceSig + ")"))
+			if sourceValue.CanAddr() {
+				p(destValue.GetSetterSource("&(" + sourceSig + ")"))
+			} else {
+				a := mctx.NextVarCount()
+				p("s%d := ", a, sourceSig)
+				p(destValue.GetSetterSource(fmt.Sprintf("&s%d", a)))
+			}
 		case !sourceIsPointer && !destIsPointer:
 			p(destValue.GetSetterSource(sourceSig))
 
+		}
+		if mf != nil {
+			p("}")
 		}
 		return
 	}
@@ -1238,7 +1280,13 @@ func genAssignStmt(printer Printer,
 		genAssignStmt(printer,
 			NewLocalMappingValue(fmt.Sprintf("%s(%s)", GetSource(destType, mctx), sourceSig), destType),
 			destValue, mctx)
+		if mf != nil {
+			p("}")
+		}
 		return
+	}
+	if mf != nil {
+		p("}")
 	}
 
 }
