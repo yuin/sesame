@@ -81,13 +81,17 @@ type Mappers interface {
 type mappers struct {
 	dependencies sync.Map // [string, any]
 	factories    sync.Map // [string, func(*mappers) (any, error)]
+	parent Mappers
 }
 
 // NewMappers return a new [Mappers] .
-func NewMappers() Mappers {
+func NewMappers(parent ...Mappers) Mappers {
 	mappers := &mappers{
 		dependencies: sync.Map{},
 		factories:    sync.Map{},
+	}
+	if len(parent) != 0 {
+		mappers.parent = parent[0]
 	}
 	{{MAPPERS}}
 	return mappers
@@ -162,6 +166,13 @@ func (d *mappers) Get(name string) (any, error) {
 			}
 			d.dependencies.Store(name, obj)
 		} else {
+			if d.parent != nil {
+				obj, err := d.parent.Get(name)
+				if err != nil {
+					return nil, err
+				}
+				return obj, nil
+			}
 			merr := &merror {
 				error: fmt.Errorf("Object %%s not found", name),
 				notFound: true,

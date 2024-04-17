@@ -306,30 +306,10 @@ Large applications often consist of multiple go modules.
 You can hierarchize mappers by a delegation like the following:
 
 ```go
-type delegatingMappers struct {
-	Mappers
-	parent Mappers
-}
-
-func (d *delegatingMappers) Get(name string) (any, error) {
-	v, err := d.Mappers.Get(name)
-	var merr interface {
-		NotFound() bool
-	}
-	if errors.As(err, &merr) && merr.NotFound() {
-		return d.parent.Get(name)
-	}
-	return v, err
-}
-
 func NewDefaultMappers(parent Mappers) Mappers {
-	m := NewMappers()
-	dm := &delegatingMappers{
-		Mappers: m,
-		parent:  parent,
-	}
+	m := NewMappers(parent)
     // Add gRPC specific mappers and helpers
-    return dm
+    return m
 }
 
 // mappers := grpc_mappers.NewDefaultMappers(lib_mappers.NewMappers())
