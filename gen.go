@@ -303,7 +303,7 @@ func (m *MappingOperand) ConfigLoaded(path string) []error {
 		errs = append(errs, fmt.Errorf("%s:\t%s.name must not be empty", m.SourceFile, path))
 	}
 
-	if !filepath.IsAbs(m.Package) {
+	if !isModPackage(m.Package) && !filepath.IsAbs(m.Package) {
 		m.Package = filepath.Join(filepath.Dir(m.SourceFile), m.Package)
 	}
 
@@ -741,24 +741,40 @@ func (g *generator) Generate() error {
 		}, len(mappings))
 		i := 0
 		for _, mapping := range mappings {
-			LogFunc(LogLevelInfo, "Parse %s#%s", mapping.A.Package, mapping.A.Name)
-			a, err := ParseStruct(mapping.A.Package, mapping.A.Name, mctx)
+			err := func() error {
+				oldCwd, _ := os.Getwd()
+				rootPath, err := findRootPath(mapping.SourceFile)
+				if err != nil {
+					return err
+				}
+				_ = os.Chdir(rootPath)
+				defer func() {
+					_ = os.Chdir(oldCwd)
+				}()
+
+				LogFunc(LogLevelInfo, "Parse %s#%s", mapping.A.Package, mapping.A.Name)
+				a, err := ParseStruct(mapping.A.Package, mapping.A.Name, mctx)
+				if err != nil {
+					return err
+				}
+				LogFunc(LogLevelInfo, "Parse %s#%s", mapping.B.Package, mapping.B.Name)
+				b, err := ParseStruct(mapping.B.Package, mapping.B.Name, mctx)
+				if err != nil {
+					return err
+				}
+				if len(pkg) > 0 && pkg != mapping.Package {
+					return fmt.Errorf("Destination %s have multiple package names", dest)
+				}
+				pkg = mapping.Package
+				lst[i].Mapping = mapping
+				lst[i].A = a
+				lst[i].B = b
+				i++
+				return nil
+			}()
 			if err != nil {
 				return err
 			}
-			LogFunc(LogLevelInfo, "Parse %s#%s", mapping.B.Package, mapping.B.Name)
-			b, err := ParseStruct(mapping.B.Package, mapping.B.Name, mctx)
-			if err != nil {
-				return err
-			}
-			if len(pkg) > 0 && pkg != mapping.Package {
-				return fmt.Errorf("Destination %s have multiple package names", dest)
-			}
-			pkg = mapping.Package
-			lst[i].Mapping = mapping
-			lst[i].A = a
-			lst[i].B = b
-			i++
 		}
 		printer.WriteDoNotEdit()
 		p(`package %s`, pkg)

@@ -31,18 +31,9 @@ func ParseStruct(path string, name string, mctx *MappingContext) (types.Object, 
 }
 
 // ParseFile parses a given Go source code file.
+// Package will be imported as we in working directory.
+// You may need to os.Chdir() before this method.
 func ParseFile(pkgPath string, mctx *MappingContext) (*types.Package, error) {
-	oldCwd, _ := os.Getwd()
-	pkgPath, _ = filepath.Abs(pkgPath)
-	rootPath, err := findRootPath(pkgPath)
-	if err != nil {
-		return nil, err
-	}
-	_ = os.Chdir(rootPath)
-	defer func() {
-		_ = os.Chdir(oldCwd)
-	}()
-
 	absPkgPath, err := toAbsoluteImportPath(pkgPath)
 	if err != nil {
 		return nil, err

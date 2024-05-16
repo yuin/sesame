@@ -1,9 +1,11 @@
 package sesame
 
 import (
+	"bytes"
 	"fmt"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -263,6 +265,25 @@ func mappersName(sourceType, destType types.Type) string {
 var modulePattern = regexp.MustCompile(`^\s*module\s*(.*)`)
 
 func toAbsoluteImportPath(path string) (string, error) {
+	if isModPackage(path) {
+		parts := strings.Split(path, "/")
+		i := len(parts) - 1
+		for ; i >= 0; i-- {
+			pkg := strings.Join(parts[:i+1], "/")
+			cmd := exec.Command("go", "list", "-f", "'{{.Dir}}'", "-m", pkg)
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			if err := cmd.Run(); err != nil {
+				continue
+			}
+			p := strings.Trim(strings.TrimSpace(out.String()), "'")
+			if i != len(parts)-1 {
+				p = filepath.Join(p, filepath.Join(parts[i+1:]...))
+			}
+			return p, nil
+		}
+		return "", fmt.Errorf("Can not resolve qualified package path: %s", path)
+	}
 	var buf []string
 	start := path
 	for cur := start; cur != filepath.Dir(cur); cur = filepath.Dir(cur) {
@@ -279,4 +300,19 @@ func toAbsoluteImportPath(path string) (string, error) {
 		buf = append([]string{filepath.Base(cur)}, buf...)
 	}
 	return "", fmt.Errorf("Can not resolve qualified package path: %s", path)
+}
+
+func isModPackage(pkg string) bool {
+	if filepath.IsAbs(pkg) {
+		return false
+	}
+	if strings.Contains(pkg, "./") || strings.Contains(pkg, "../") || strings.Contains(pkg, ".\\") || strings.Contains(pkg, "..\\") {
+		return false
+	}
+
+	parts := strings.Split(pkg, "/")
+	if len(parts) < 2 {
+		return false
+	}
+	return strings.Contains(parts[0], ".")
 }
