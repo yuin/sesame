@@ -1032,7 +1032,8 @@ func genMapFuncBody(printer Printer,
 						for i := 1; i < len(parts); i++ {
 							nestName := strings.Join(parts[:i], ".")
 							nestField, ok := GetField(destStruct, nestName, mapping.IgnoreCase)
-							if ok {
+							_, pok := nestField.Type().(*types.Pointer)
+							if ok && pok {
 								p("if %s.%s == nil {", destNameBase, nestName)
 								p("  %s.%s = %s{}", destNameBase, nestName, strings.Replace(GetSource(nestField.Type(), mctx), "*", "&", 1))
 								p("}")
