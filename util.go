@@ -208,9 +208,17 @@ func GetPreferableTypeSource(typ types.Type, mctx *MappingContext) string {
 // GetPointerTypeSource returns a source code of a type with a pointer.
 func GetPointerTypeSource(typ types.Type, mctx *MappingContext) string {
 	if ptyp, ok := typ.(*types.Pointer); ok {
-		return GetSource(ptyp.Elem(), mctx)
+		return "*" + GetSource(ptyp.Elem(), mctx)
 	}
 	return "*" + GetSource(typ, mctx)
+}
+
+// GetValueTypeSource returns a source code of a type without a pointer.
+func GetValueTypeSource(typ types.Type, mctx *MappingContext) string {
+	if ptyp, ok := typ.(*types.Pointer); ok {
+		return GetSource(ptyp.Elem(), mctx)
+	}
+	return GetSource(typ, mctx)
 }
 
 // IsBuiltinType returns true if given type is defined in the universe.

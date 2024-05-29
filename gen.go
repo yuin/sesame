@@ -1244,11 +1244,18 @@ func genAssignStmt(printer Printer,
 
 		var destName string
 		if destValue.CanAddr() {
+			destPointer := ""
 			if destIsPointer {
-				destName = destValue.GetGetterSource()
+				destPointer = destValue.GetGetterSource()
 			} else {
-				destName = "&(" + destValue.GetGetterSource() + ")"
+				destPointer = "&(" + destValue.GetGetterSource() + ")"
 			}
+			p("v := %s", destPointer)
+			destName = "v"
+			p("shouldAssign := v == nil")
+			p("if shouldAssign {")
+			p("  v = new(%s)", GetValueTypeSource(destType, mctx))
+			p("}")
 		} else {
 			p("var v %s", GetSource(destType, mctx))
 			if destIsPointer {
@@ -1260,7 +1267,13 @@ func genAssignStmt(printer Printer,
 		p("  if err := m.%s(ctx, %s, %s); err != nil {", mf.FieldName, argName, destName)
 		p("    return err")
 		if destValue.CanAddr() {
-			p("}")
+			p("  } else if shouldAssign {")
+			if destIsPointer {
+				p(destValue.GetSetterSource("v"))
+			} else {
+				p(destValue.GetSetterSource("*v"))
+			}
+			p("  }")
 		} else {
 			p("  } else {")
 			p(destValue.GetSetterSource("v"))
