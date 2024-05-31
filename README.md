@@ -64,11 +64,85 @@ $ go install github.com/yuin/sesame/cmd/sesame@latest
 1. Create a configuration file(s).
 2. Run the `sesame` command.
 3. Create a `Mappers` object in your code.
-4. (Optional) Add helpers and custom mappers.
+4. (Optional) Add helpers and converters.
 5. Get a mapper from `Mappers`.
 6. Map objects by the mapper.
 
 See [tests](https://github.com/yuin/sesame/tree/master/testdata) for examples.
+
+### Objects
+sesame consists of 3 kind of objects: **Mapper**, **Converter**, and **Helper** .
+
+#### Mapper
+Mappers map struct fields from A to B and B to A.  Mappers only work when source
+object is not nil.
+
+Mapper has methods like the following:
+
+```go
+type TodoMapper interface {
+	TodoModelToTodo(pkg00000.Context, *pkg00001.TodoModel, *pkg00002.Todo) error
+	TodoToTodoModel(pkg00000.Context, *pkg00002.Todo, *pkg00001.TodoModel) error
+}
+```
+
+2nd and 3rd arguments are source and destination objects. source and destination objects never be nil.
+
+A source argument types will be a:
+
+- Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
+- Pointer: others
+
+A destination argument is always a pointer.
+
+#### Converter
+Converters convert a value from A to B and B to A. Converters work even if source object is nil.
+
+Converter has methods like the following:
+
+```go
+type TimeStringConverter struct {
+}
+
+func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (*time.Time, error) {
+	t, err := time.Parse(time.RFC3339, source)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, error) {
+	if source == nil {
+		return "", nil
+	}
+	return source.Format(time.RFC3339), nil
+}
+```
+
+A source argument and returned value types will be a:
+
+- Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
+- Pointer: others
+
+Note that a source argument can be nil.
+
+### Priorities of mappers and converts
+When sesame founds a mapping between different types, it uses the following priorities:
+
+- If converters are defined for these types, sesame uses them.
+- If converters are not defined...
+    - If mappers are defined for these types, sesame uses them.
+    - If mappers are not defined...
+      - If the types can be casted safely, sesame uses the cast.
+
+### Naming convention
+
+- Mapper name must end with "Mapper" like "TodoMapper"
+- Converter name must end with "Converter" like "TimeStringConverter"
+- Helper name must end with "Helper" like "TodoMapperHelper"
+- Mapper function name must be "XxxToYyy"
+- Converter function name must be "XxxToYyy"
 
 ### Mapping configuration file
 sesame uses mapping configuration files written in YAML. 
@@ -150,7 +224,7 @@ Mapping codes look like the following:
 
    ````go
    mappers := mapper.NewMappers()           // Creates new Mappers object
-   mapper.AddTimeToStringMapper(mappers)    // Add custom mappers
+   mapper.AddTimeToStringConverter(mappers)    // Add converter
    mappers.Add("TodoMapperHelper", &todoMapperHelper{}) // Add helpers
    ```
 
@@ -166,77 +240,60 @@ Mapping codes look like the following:
    err := todoMapper.ModelToEntity(ctx, model, &entity) 
    ```
 
-### Custom mappers
+### Add Converters
 By default, sesame can map following types:
 
 - Same types
 - Castable types(i.e. `int -> int64`, `type MyType int <-> int`)
 - `map`, `slice` and `array`
 
-For others, you can write and register custom mappers.
+For others, you can write and register converters.
 
 Example: `string <-> time.Time` mapper
 
 ```go
-type TimeStringMapper struct {
+type TimeStringConverter struct {
 }
 
-func (m *TimeStringMapper) StringToTime(ctx context.Context, source string, dest *time.Time) error {
+func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (*time.Time, error) {
 	t, err := time.Parse(time.RFC3339, source)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	*dest = t
-	return nil
+	return &t, nil
 }
 
-func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time, dest *string) error {
-	*dest = source.Format(time.RFC3339)
-	return nil
+func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, error) {
+	return source.Format(time.RFC3339), nil
 }
 
-type Mappers interface {
-    AddFactory(string, func(MapperGetter) (any, error))
-    AddMapperFuncFactory(string, string, func(MapperGetter) (any, error))
-}
-
-func AddTimeToStringMapper(mappers Mappers) {
-    mappers.AddFactory("TimeStringMapper", func(m MapperGetter) (any, error) {
-        return &TimeStringMapper{}, nil
-    })
-    mappers.AddMapperFuncFactory("string", "time#Time", func(m MapperGetter) (any, error) {
-        obj, _ := m.Get("TimeStringMapper")
-        stringTime := obj.(*TimeStringMapper)
-        return stringTime.StringToTime, nil
-    })
-    mappers.AddMapperFuncFactory("time#Time", "string", func(m MapperGetter) (any, error) {
-        obj, _ := m.Get("TimeStringMapper")
-        stringTime := obj.(*TimeStringMapper)
-        return stringTime.TimeToString, nil
-    })
+func AddTimeToStringConverter(mappers interface {
+	Add(string, any)
+}) {
+	stringTime := &TimeStringConverter{}
+	mappers.Add("TimeStringConverter", stringTime)
 }
 ```
 
-or if a mapper does not require other mappers, you can do it just 
 
-```go
-func AddTimeToStringMapper(mappers Mappers) {
-    mappers.Add("TimeStringMapper", &TimeStringMapper{})
-}
+If a converter depends other converters or mappers, you can use `AddFactory` and `AddConverterFuncFactory`.
+
+```
+	mappers.AddFactory("TimeStringConverter", func(g MapperGetter) (any, error) {
+		otherConverter, _ = g.Get("OtherConverter")
+		return &TimeStringConverter{otherConverter: otherConverter.(OtherConverter)}, nil
+	})
+	mappers.AddConverterFuncFactory("string", "time#Time", func(g MapperGetter) (any, error) {
+		conv, _ = g.Get("TimeStringConverter")
+		return conv.(TimeStringConverter).StringToTime, nil
+	})
+	mappers.AddConverterFuncFactory("time#Time", "string", func(g MapperGetter) (any, error) {
+		conv, _ = g.Get("TimeStringConverter")
+		return conv.(TimeStringConverter).TimeToString, nil
+	})
 ```
 
-`Mappers.AddMapperFuncFactory` takes qualified type names as arguments. A qualified type name is `FULL_PACKAGE_PATH#TYPENAME`(i.e. `time#Time`, `example.com/testmod/domain#Todo`).
-
-Source argument types in custom mapping functions must be a
-
-- Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
-- Pointer: others
-
-Destination arguments are pointers.
-
-So `func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time, dest *string) error` defines source type as a pointer(`*time.Time`).
-
-`Mappers.Add` finds given mapper methods name like 'XxxToYyy' and calls `AddMapperFuncFactory`.
+`Mappers.Add` finds given converter methods name like 'XxxToYyy' and calls `AddConverterFuncFactory`.
 
 ### Helpers
 You can define helper functions for more complex mappings.
@@ -278,6 +335,13 @@ mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
 ```
 
 Helpers will be called at the end of the generated mapping implementations.
+
+### Multiple mappers and converters for same type combinations
+sesame does not allow to define multiple mappers and converts for same type combinations.
+If you want to define multiple mappers and converts for same type combinations
+
+1. Set `ignore` to `true` for the field in the configuration file.
+2. Manually map or convert field in Helper.
 
 ### Hierarchized mappers
 Large applications often consist of multiple go modules.

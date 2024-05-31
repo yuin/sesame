@@ -267,7 +267,11 @@ func getQualifiedTypeName(typ types.Type) string {
 }
 
 func mappersName(sourceType, destType types.Type) string {
-	return fmt.Sprintf("%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
+	return fmt.Sprintf("mapperFunc:%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
+}
+
+func convertersName(sourceType, destType types.Type) string {
+	return fmt.Sprintf("converterFunc:%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
 }
 
 var modulePattern = regexp.MustCompile(`^\s*module\s*(.*)`)

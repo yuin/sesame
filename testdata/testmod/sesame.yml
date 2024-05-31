@@ -26,9 +26,9 @@ mappings:
       - a: ValidateOnly
       - b: User
 
-  - name: TodoMapperEmpty
+  - name: TodoEmptyMapper
     package: mapper
-    destination: ./mapper/todo_mapper_empty_gen.go
+    destination: ./mapper/todo_empty_mapper_gen.go
     bidirectional: true
     a:
       package: ./model

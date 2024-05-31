@@ -877,6 +877,14 @@ func (g *generator) Generate() error {
 				fmt.Sprintf(`  m.%s = obj.(%s)`, mf.FieldName, mf.Signature(mctx)),
 				`}`)
 		}
+		for _, cf := range mctx.ConverterFuncFields() {
+			mapperFieldNames = append(mapperFieldNames, fmt.Sprintf("%s %s", cf.FieldName, cf.Signature(mctx)))
+			initMapperFields = append(initMapperFields,
+				fmt.Sprintf(`if obj, err := mapperGetter.GetConverterFunc("%s", "%s"); err == nil {`,
+					GetQualifiedTypeName(cf.Source), GetQualifiedTypeName(cf.Dest)),
+				fmt.Sprintf(`  m.%s = obj.(%s)`, cf.FieldName, cf.Signature(mctx)),
+				`}`)
+		}
 		var imps []string
 		for impPath, impAlias := range mctx.Imports() {
 			imps = append(imps, fmt.Sprintf("%s \"%s\"", impAlias, impPath))
@@ -1102,6 +1110,7 @@ func genFieldMapStmts(printer Printer,
 	destType := destValue.Type()
 
 	mctx.AddMapperFuncField(sourceType, destType)
+	mctx.AddConverterFuncField(sourceType, destType)
 	switch typ := sourceType.(type) {
 	case *types.Array:
 		dtype, ok := destType.(*types.Array)
@@ -1220,12 +1229,19 @@ func genAssignStmt(printer Printer,
 	sourceIsPointerPreferable := IsPointerPreferableType(sourceType)
 	destTypeName := GetQualifiedTypeName(destType)
 	_, destIsPointer := destType.(*types.Pointer)
+	destIsPointerPreferable := IsPointerPreferableType(destType)
 
-	// Try to execute custom mapper
+	done := mctx.NextVarCount()
+
+	// Try to execute custom converter & mapper
+	cf := mctx.GetConverterFuncFieldName(sourceType, destType)
 	mf := mctx.GetMapperFuncFieldName(sourceType, destType)
-	if mf != nil {
-		p("if m.%s != nil {", mf.FieldName)
+	if cf != nil || mf != nil {
+		p("done%d := false", done)
+	}
+	if cf != nil {
 		var argName string
+		argInit := func() {}
 		switch {
 		case sourceIsPointerPreferable && sourceIsPointer:
 			argName = sourceSig
@@ -1237,25 +1253,73 @@ func genAssignStmt(printer Printer,
 				argName = "&s"
 			}
 		case !sourceIsPointerPreferable && sourceIsPointer:
-			argName = "*(" + sourceSig + ")"
+			argName = "source"
+			argInit = func() {
+				p("var source %s", GetValueTypeSource(sourceType, mctx))
+				p("if (%s) != nil {", sourceSig)
+				p("  source = *(%s)", sourceSig)
+				p("}")
+			}
 		case !sourceIsPointerPreferable && !sourceIsPointer:
 			argName = sourceSig
 		}
 
+		p("if m.%s != nil && !done%d {", cf.FieldName, done)
+		p("done%d = true", done)
+		argInit()
+		p("  if converted, err := m.%s(ctx, %s); err != nil {", cf.FieldName, argName)
+		p("    return err")
+		p("  } else {")
+		switch {
+		case destIsPointerPreferable && destIsPointer:
+			p(destValue.GetSetterSource("converted"))
+		case destIsPointerPreferable && !destIsPointer:
+			p("if converted != nil {")
+			p(destValue.GetSetterSource("*converted"))
+			p("}")
+		case !destIsPointerPreferable && destIsPointer:
+			p(destValue.GetSetterSource("&converted"))
+		case !destIsPointerPreferable && !destIsPointer:
+			p(destValue.GetSetterSource("converted"))
+		}
+		p("  }")
+		p("}")
+	}
+	// custom mapper only works when no custom converter is available.
+	if mf != nil {
+		var argName string
+		guard := ""
+		switch {
+		case sourceIsPointerPreferable && sourceIsPointer:
+			argName = sourceSig
+			guard = " && " + argName + " != nil "
+		case sourceIsPointerPreferable && !sourceIsPointer:
+			if sourceValue.CanAddr() {
+				argName = "&(" + sourceSig + ")"
+			} else {
+				p("s := %s", sourceSig)
+				argName = "&s"
+			}
+		case !sourceIsPointerPreferable && sourceIsPointer:
+			argName = "*(" + sourceSig + ")"
+			guard = " && " + sourceSig + " != nil "
+		case !sourceIsPointerPreferable && !sourceIsPointer:
+			argName = sourceSig
+		}
+
+		p("if m.%s != nil %s && !done%d {", mf.FieldName, guard, done)
+		p("done%d = true", done)
+
 		var destName string
 		if destValue.CanAddr() {
-			destPointer := ""
 			if destIsPointer {
-				destPointer = destValue.GetGetterSource()
+				destName = destValue.GetGetterSource()
+				p("if %s == nil {", destName)
+				p(destValue.GetSetterSource("new(" + GetValueTypeSource(destType, mctx) + ")"))
+				p("}")
 			} else {
-				destPointer = "&(" + destValue.GetGetterSource() + ")"
+				destName = "&(" + destValue.GetGetterSource() + ")"
 			}
-			p("v := %s", destPointer)
-			destName = "v"
-			p("shouldAssign := v == nil")
-			p("if shouldAssign {")
-			p("  v = new(%s)", GetValueTypeSource(destType, mctx))
-			p("}")
 		} else {
 			p("var v %s", GetSource(destType, mctx))
 			if destIsPointer {
@@ -1267,27 +1331,27 @@ func genAssignStmt(printer Printer,
 		p("  if err := m.%s(ctx, %s, %s); err != nil {", mf.FieldName, argName, destName)
 		p("    return err")
 		if destValue.CanAddr() {
-			p("  } else if shouldAssign {")
-			if destIsPointer {
-				p(destValue.GetSetterSource("v"))
-			} else {
-				p(destValue.GetSetterSource("*v"))
-			}
 			p("  }")
 		} else {
 			p("  } else {")
 			p(destValue.GetSetterSource("v"))
 			p("  }")
 		}
-		p("} else { ")
+		p("}")
 	}
 
 	if sourceTypeName == destTypeName {
+		if cf != nil || mf != nil {
+			p("if !done%d {", done)
+			p("done%d = true", done)
+		}
 		switch {
 		case sourceIsPointer && destIsPointer:
 			p(destValue.GetSetterSource(sourceSig))
 		case sourceIsPointer && !destIsPointer:
+			p("if (%s) != nil {", sourceSig)
 			p(destValue.GetSetterSource("*(" + sourceSig + ")"))
+			p("}")
 		case !sourceIsPointer && destIsPointer:
 			if sourceValue.CanAddr() {
 				p(destValue.GetSetterSource("&(" + sourceSig + ")"))
@@ -1300,23 +1364,24 @@ func genAssignStmt(printer Printer,
 			p(destValue.GetSetterSource(sourceSig))
 
 		}
-		if mf != nil {
+		if cf != nil || mf != nil {
 			p("}")
 		}
 		return
 	}
 
 	if CanCast(sourceType, destType) {
+		if cf != nil || mf != nil {
+			p("if !done%d {", done)
+			p("done%d = true", done)
+		}
 		genAssignStmt(printer,
 			NewLocalMappingValue(fmt.Sprintf("%s(%s)", GetSource(destType, mctx), sourceSig), destType),
 			destValue, mctx)
-		if mf != nil {
+		if cf != nil || mf != nil {
 			p("}")
 		}
 		return
-	}
-	if mf != nil {
-		p("}")
 	}
 
 }

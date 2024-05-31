@@ -5,26 +5,24 @@ import (
 	"time"
 )
 
-type TimeStringMapper struct {
+type TimeStringConverter struct {
 }
 
-func (m *TimeStringMapper) StringToTime(ctx context.Context, source string, dest *time.Time) error {
+func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (*time.Time, error) {
 	t, err := time.Parse(time.RFC3339, source)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	*dest = t
-	return nil
+	return &t, nil
 }
 
-func (m *TimeStringMapper) TimeToString(ctx context.Context, source *time.Time, dest *string) error {
-	*dest = source.Format(time.RFC3339)
-	return nil
+func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, error) {
+	return source.Format(time.RFC3339), nil
 }
 
-func AddTimeToStringMapper(mappers interface {
+func AddTimeToStringConverter(mappers interface {
 	Add(string, any)
 }) {
-	stringTime := &TimeStringMapper{}
-	mappers.Add("TimeStringMapper", stringTime)
+	stringTime := &TimeStringConverter{}
+	mappers.Add("TimeStringConverter", stringTime)
 }

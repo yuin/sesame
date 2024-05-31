@@ -28,7 +28,7 @@ func mustTime(s string) time.Time {
 
 func TestTodoMapper(t *testing.T) {
 	mappers := NewMappers()
-	mapper.AddTimeToStringMapper(mappers)
+	mapper.AddTimeToStringConverter(mappers)
 	ctx := context.TODO()
 
 	obj, err := mappers.Get("TodoMapper")
@@ -127,7 +127,7 @@ func (h *todoMapperHelper) TodoToTodoModel(ctx context.Context, source *domain.T
 
 func TestMapperHelper(t *testing.T) {
 	mappers := NewMappers()
-	mapper.AddTimeToStringMapper(mappers)
+	mapper.AddTimeToStringConverter(mappers)
 	ctx := context.TODO()
 
 	mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
@@ -185,10 +185,10 @@ func TestMapperHelper(t *testing.T) {
 
 func TestNilCollection(t *testing.T) {
 	mappers := NewMappers()
-	mapper.AddTimeToStringMapper(mappers)
+	mapper.AddTimeToStringConverter(mappers)
 	ctx := context.TODO()
 
-	obj, err := mappers.Get("TodoMapperEmpty")
+	obj, err := mappers.Get("TodoEmptyMapper")
 	if err != nil {
 		t.Fatal(err)
 	}
