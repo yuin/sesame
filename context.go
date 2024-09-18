@@ -59,10 +59,19 @@ type ConverterFuncField struct {
 
 // Signature returns a function signature.
 func (c *ConverterFuncField) Signature(mctx *MappingContext) string {
-	return fmt.Sprintf("func(%s.Context, %s) (%s, error)",
-		mctx.GetImportAlias("context"),
-		GetPreferableTypeSource(c.Source, mctx),
-		GetPreferableTypeSource(c.Dest, mctx))
+	destIsPointerPreferable := IsPointerPreferableType(c.Dest)
+
+	if destIsPointerPreferable {
+		return fmt.Sprintf("func(%s.Context, %s) (%s, error)",
+			mctx.GetImportAlias("context"),
+			GetPointerTypeSource(c.Source, mctx),
+			GetPreferableTypeSource(c.Dest, mctx))
+	} else {
+		return fmt.Sprintf("func(%s.Context, %s) (%s, bool, error)",
+			mctx.GetImportAlias("context"),
+			GetPointerTypeSource(c.Source, mctx),
+			GetPreferableTypeSource(c.Dest, mctx))
+	}
 }
 
 // NewMappingContext returns new [MappingContext] .

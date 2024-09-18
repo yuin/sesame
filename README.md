@@ -104,7 +104,10 @@ Converter has methods like the following:
 type TimeStringConverter struct {
 }
 
-func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (*time.Time, error) {
+func (m *TimeStringConverter) StringToTime(ctx context.Context, source *string) (*time.Time, error) {
+	if source == nil {
+		return nil, nil
+	}
 	t, err := time.Parse(time.RFC3339, source)
 	if err != nil {
 		return nil, err
@@ -112,18 +115,19 @@ func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (
 	return &t, nil
 }
 
-func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, error) {
+func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, bool, error) {
 	if source == nil {
-		return "", nil
+		return "", true, nil
 	}
-	return source.Format(time.RFC3339), nil
+	return source.Format(time.RFC3339), false, nil
 }
 ```
 
-A source argument and returned value types will be a:
+A source argument is a pointer. Returned value types will be a:
 
-- Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
-- Pointer: others
+
+- primitive types(i.e. `string`, `int`, `slice` ...): `value, isnil, error`
+- others: `pointer, error`
 
 Note that a source argument can be nil.
 
@@ -255,7 +259,10 @@ Example: `string <-> time.Time` mapper
 type TimeStringConverter struct {
 }
 
-func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (*time.Time, error) {
+func (m *TimeStringConverter) StringToTime(ctx context.Context, source *string) (*time.Time, error) {
+	if source == nil {
+		return nil, nil
+	}
 	t, err := time.Parse(time.RFC3339, source)
 	if err != nil {
 		return nil, err
@@ -263,8 +270,11 @@ func (m *TimeStringConverter) StringToTime(ctx context.Context, source string) (
 	return &t, nil
 }
 
-func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, error) {
-	return source.Format(time.RFC3339), nil
+func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Time) (string, bool, error) {
+	if source == nil {
+		return "", true, nil
+	}
+	return source.Format(time.RFC3339), false, nil
 }
 
 func AddTimeToStringConverter(mappers interface {

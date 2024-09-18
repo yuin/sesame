@@ -142,7 +142,7 @@ func (d *mappers) Add(name string, obj any) {
 			method := typ.Method(i)
 			if mapperFuncNamePattern.MatchString(method.Name) {
 				ft := reflect.TypeOf(method.Func.Interface())
-				if ft.NumIn() != 3 || ft.NumOut() != 2 {
+				if ft.NumIn() != 3 || (ft.NumOut() != 2 && ft.NumOut() != 3) {
 					continue
 				}
 				in := ft.In(2)

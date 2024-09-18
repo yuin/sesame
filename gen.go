@@ -485,11 +485,11 @@ func NewObjectPropertyMappingValue(base string, named *types.Named, name string,
 	}
 
 	setter, ok := GetMethod(named, "Set"+name, ignoreCase)
-	if ok && setter.Exported() {
+	if ok && setter.Exported() && GetParamsCount(setter) == 1 {
 		ret.setter = setter
 	}
 	getter, ok := GetMethod(named, name, ignoreCase)
-	if ok && getter.Exported() {
+	if ok && getter.Exported() && GetParamsCount(getter) == 0 {
 		ret.getter = getter
 	}
 	if ret.CanGet() || ret.CanSet() {
@@ -1241,48 +1241,51 @@ func genAssignStmt(printer Printer,
 	}
 	if cf != nil {
 		var argName string
-		argInit := func() {}
 		switch {
-		case sourceIsPointerPreferable && sourceIsPointer:
+		case sourceIsPointer:
 			argName = sourceSig
-		case sourceIsPointerPreferable && !sourceIsPointer:
+		case !sourceIsPointer:
 			if sourceValue.CanAddr() {
 				argName = "&(" + sourceSig + ")"
 			} else {
 				p("s := %s", sourceSig)
 				argName = "&s"
 			}
-		case !sourceIsPointerPreferable && sourceIsPointer:
-			argName = "source"
-			argInit = func() {
-				p("var source %s", GetValueTypeSource(sourceType, mctx))
-				p("if (%s) != nil {", sourceSig)
-				p("  source = *(%s)", sourceSig)
-				p("}")
-			}
-		case !sourceIsPointerPreferable && !sourceIsPointer:
-			argName = sourceSig
 		}
-
 		p("if m.%s != nil && !done%d {", cf.FieldName, done)
 		p("done%d = true", done)
-		argInit()
-		p("  if converted, err := m.%s(ctx, %s); err != nil {", cf.FieldName, argName)
-		p("    return err")
-		p("  } else {")
-		switch {
-		case destIsPointerPreferable && destIsPointer:
-			p(destValue.GetSetterSource("converted"))
-		case destIsPointerPreferable && !destIsPointer:
-			p("if converted != nil {")
-			p(destValue.GetSetterSource("*converted"))
-			p("}")
-		case !destIsPointerPreferable && destIsPointer:
-			p(destValue.GetSetterSource("&converted"))
-		case !destIsPointerPreferable && !destIsPointer:
-			p(destValue.GetSetterSource("converted"))
+		if destIsPointerPreferable {
+			p("  if converted, err := m.%s(ctx, %s); err != nil {", cf.FieldName, argName)
+			p("    return err")
+			p("  } else {")
+			switch {
+			case destIsPointer:
+				p(destValue.GetSetterSource("converted"))
+			case !destIsPointer:
+				p("if converted != nil {")
+				p(destValue.GetSetterSource("*converted"))
+				p("}")
+			}
+			p("  }")
+		} else {
+			p("  if converted, isnil, err := m.%s(ctx, %s); err != nil {", cf.FieldName, argName)
+			p("    return err")
+			p("  } else {")
+			switch {
+			case destIsPointer:
+				p("if isnil {")
+				p(destValue.GetSetterSource("nil"))
+				p("} else {")
+				p(destValue.GetSetterSource("&converted"))
+				p("}")
+			case !destIsPointer:
+				p("if !isnil {")
+				p(destValue.GetSetterSource("converted"))
+				p("}")
+			}
+			p("  }")
 		}
-		p("  }")
+
 		p("}")
 	}
 	// custom mapper only works when no custom converter is available.

@@ -91,6 +91,10 @@ func GetSource(typ types.Type, mctx *MappingContext) string {
 	case *types.Array:
 		return fmt.Sprintf("[%d]%s", t.Len(), GetSource(t.Elem(), mctx))
 	case *types.Named:
+		pkg := t.Obj().Pkg()
+		if pkg == nil {
+			return GetSource(t.Obj().Type().Underlying(), mctx)
+		}
 		if mctx.AbsolutePackagePath() != t.Obj().Pkg().Path() {
 			alias := mctx.GetImportAlias(t.Obj().Pkg().Path())
 			name := t.Obj().Name()
@@ -258,6 +262,10 @@ func getQualifiedTypeName(typ types.Type) string {
 	case *types.Array:
 		return fmt.Sprintf("[%d]%s", t.Len(), getQualifiedTypeName(t.Elem()))
 	case *types.Named:
+		pkg := t.Obj().Pkg()
+		if pkg == nil {
+			return t.Obj().Name()
+		}
 		return t.Obj().Pkg().Path() + "#" + t.Obj().Name()
 	case *types.Basic:
 		return t.Name()
@@ -327,4 +335,17 @@ func isModPackage(pkg string) bool {
 		return false
 	}
 	return strings.Contains(parts[0], ".")
+}
+
+var methodPattern = regexp.MustCompile(`func \([^\)]*\)\.[\w]+\(([^\)]*)\)`)
+
+// GetParamsCount returns a number of arguments of a function.
+// TODO: f.Signature() was added in Go1.23. Use it instead of this function.
+func GetParamsCount(f *types.Func) int {
+	s := f.String()
+	mm := methodPattern.FindStringSubmatch(s)
+	if len(mm) == 0 {
+		return 0
+	}
+	return strings.Count(mm[1], " ")
 }
