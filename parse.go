@@ -51,6 +51,10 @@ func ParseFile(pkgPath string, mctx *MappingContext) (*types.Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(pkgs) == 0 {
+		return nil, fmt.Errorf("Failed to load a package '%s'. The cause is "+
+			"probably that the package cannot be compiled.", pkgPath)
+	}
 	pkg := pkgs[0].Types
 
 	mctx.AddImport(pkg.Path())
