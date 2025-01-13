@@ -10,6 +10,7 @@ type TodoModel struct {
 	Done         bool
 	UpdatedAt    string
 	ValidateOnly bool
+	Inf          string
 	privateValue int
 }
 

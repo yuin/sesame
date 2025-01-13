@@ -86,14 +86,7 @@ type TodoMapper interface {
 }
 ```
 
-2nd and 3rd arguments are source and destination objects. source and destination objects never be nil.
-
-A source argument types will be a:
-
-- Raw value: primitive types(i.e. `string`, `int`, `slice` ...)
-- Pointer: others
-
-A destination argument is always a pointer.
+Source and destination arguments are always pointers.
 
 #### Converter
 Converters convert a value from A to B and B to A. Converters work even if source object is nil.
@@ -123,22 +116,18 @@ func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Tim
 }
 ```
 
-A source argument is a pointer. Returned value types will be a:
-
+A source argument is a pointer or an interface. Returned value types will be a:
 
 - primitive types(i.e. `string`, `int`, `slice` ...): `value, isnil, error`
+- interface: `interface`, `error`
 - others: `pointer, error`
 
 Note that a source argument can be nil.
 
-### Priorities of mappers and converts
-When sesame founds a mapping between different types, it uses the following priorities:
+### Differences between Mapper and Converter
 
-- If converters are defined for these types, sesame uses them.
-- If converters are not defined...
-    - If mappers are defined for these types, sesame uses them.
-    - If mappers are not defined...
-      - If the types can be casted safely, sesame uses the cast.
+- Mapper is used for mapping struct fields. source and destination arguments are always struct pointers.
+- Other conversions are done by Converters. source and destination argument can be any types.
 
 ### Naming convention
 

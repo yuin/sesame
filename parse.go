@@ -5,6 +5,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -30,10 +31,15 @@ func ParseStruct(path string, name string, mctx *MappingContext) (types.Object, 
 	return obj, nil
 }
 
+var pcache = sync.Map{}
+
 // ParseFile parses a given Go source code file.
 // Package will be imported as we in working directory.
 // You may need to os.Chdir() before this method.
 func ParseFile(pkgPath string, mctx *MappingContext) (*types.Package, error) {
+	if pkg, ok := pcache.Load(pkgPath); ok {
+		return pkg.(*types.Package), nil
+	}
 	absPkgPath, err := toAbsoluteImportPath(pkgPath)
 	if err != nil {
 		return nil, err
@@ -61,6 +67,7 @@ func ParseFile(pkgPath string, mctx *MappingContext) (*types.Package, error) {
 	for _, imp := range pkg.Imports() {
 		mctx.AddImport(imp.Path())
 	}
+	pcache.Store(pkgPath, pkg)
 	return pkg, nil
 }
 

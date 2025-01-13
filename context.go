@@ -3,6 +3,7 @@ package sesame
 import (
 	"fmt"
 	"go/types"
+	"regexp"
 )
 
 // MappingContext is an interface that contains contextual data for
@@ -12,6 +13,7 @@ type MappingContext struct {
 	aliasCount          int
 	aliasBase           string
 	imports             map[string]string
+	importHashes        map[string]int
 	varCount            int
 	mapperFuncFields    []*MapperFuncField
 	mapperFuncCount     int
@@ -64,14 +66,13 @@ func (c *ConverterFuncField) Signature(mctx *MappingContext) string {
 	if destIsPointerPreferable {
 		return fmt.Sprintf("func(%s.Context, %s) (%s, error)",
 			mctx.GetImportAlias("context"),
-			GetPointerTypeSource(c.Source, mctx),
-			GetPreferableTypeSource(c.Dest, mctx))
-	} else {
-		return fmt.Sprintf("func(%s.Context, %s) (%s, bool, error)",
-			mctx.GetImportAlias("context"),
-			GetPointerTypeSource(c.Source, mctx),
+			GetNillableTypeSource(c.Source, mctx),
 			GetPreferableTypeSource(c.Dest, mctx))
 	}
+	return fmt.Sprintf("func(%s.Context, %s) (%s, bool, error)",
+		mctx.GetImportAlias("context"),
+		GetNillableTypeSource(c.Source, mctx),
+		GetPreferableTypeSource(c.Dest, mctx))
 }
 
 // NewMappingContext returns new [MappingContext] .
@@ -81,6 +82,7 @@ func NewMappingContext(absPkgPath string) *MappingContext {
 		aliasCount:          0,
 		aliasBase:           "pkg",
 		imports:             map[string]string{},
+		importHashes:        map[string]int{},
 		mapperFuncFields:    []*MapperFuncField{},
 		mapperFuncCount:     0,
 		converterFuncFields: []*ConverterFuncField{},
@@ -96,13 +98,26 @@ func (c *MappingContext) AbsolutePackagePath() string {
 	return c.absPkgPath
 }
 
+var pkgr = regexp.MustCompile(`[^a-zA-Z0-9]`)
+
 // AddImport adds import path and generate new alias name for it.
 func (c *MappingContext) AddImport(path string) {
 	if path == c.AbsolutePackagePath() {
 		return
 	}
 	if _, ok := c.imports[path]; !ok {
-		c.imports[path] = fmt.Sprintf("%s%05d", c.aliasBase, c.aliasCount)
+		h := pkgr.ReplaceAllString(path, "_")
+		if _, ok := c.importHashes[path]; !ok {
+			c.importHashes[path] = 0
+		} else {
+			c.importHashes[path]++
+		}
+		hv := c.importHashes[path]
+		if hv == 0 {
+			c.imports[path] = fmt.Sprintf("%s_%s", c.aliasBase, h)
+		} else {
+			c.imports[path] = fmt.Sprintf("%s_%s_%05d", c.aliasBase, h, c.importHashes[path])
+		}
 		c.aliasCount++
 	}
 }
@@ -169,7 +184,6 @@ func (c *MappingContext) AddMapperFuncField(sourceType types.Type, destType type
 
 // GetMapperFuncFieldName returns a mapper function field name.
 func (c *MappingContext) GetMapperFuncFieldName(sourceType types.Type, destType types.Type) *MapperFuncField {
-	c.AddMapperFuncField(sourceType, destType)
 	mapperFuncName := mappersName(sourceType, destType)
 	for _, m := range c.mapperFuncFields {
 		if m.MapperFuncName == mapperFuncName {
@@ -209,7 +223,6 @@ func (c *MappingContext) AddConverterFuncField(sourceType types.Type, destType t
 
 // GetConverterFuncFieldName returns a converter function field name.
 func (c *MappingContext) GetConverterFuncFieldName(sourceType types.Type, destType types.Type) *ConverterFuncField {
-	c.AddConverterFuncField(sourceType, destType)
 	converterFuncName := convertersName(sourceType, destType)
 	for _, m := range c.converterFuncFields {
 		if m.ConverterFuncName == converterFuncName {

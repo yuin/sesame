@@ -19,6 +19,7 @@ type Todo struct {
 	Tags         [5]string
 	Finished     bool
 	UpdatedAt    time.Time
+	Inf          Inf
 	privateValue int
 }
 
@@ -28,4 +29,16 @@ func (e *Todo) SetPrivateValue(v int) {
 
 func (e *Todo) PrivateValue() int {
 	return e.privateValue
+}
+
+type Inf interface {
+	Value() string
+}
+
+type InfV struct {
+	Valuef string
+}
+
+func (i *InfV) Value() string {
+	return i.Valuef
 }

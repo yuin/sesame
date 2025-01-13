@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -776,6 +777,9 @@ func (g *generator) Generate() error {
 				return err
 			}
 		}
+		sort.Slice(lst, func(i, j int) bool {
+			return lst[i].Mapping.Name < lst[j].Mapping.Name
+		})
 		printer.WriteDoNotEdit()
 		p(`package %s`, pkg)
 		p(`import (`)
@@ -1109,8 +1113,13 @@ func genFieldMapStmts(printer Printer,
 	sourceType := sourceValue.Type()
 	destType := destValue.Type()
 
-	mctx.AddMapperFuncField(sourceType, destType)
-	mctx.AddConverterFuncField(sourceType, destType)
+	_, sstruct := GetStructType(sourceType)
+	_, dstruct := GetStructType(destType)
+	if sstruct && dstruct {
+		mctx.AddMapperFuncField(sourceType, destType)
+	} else {
+		mctx.AddConverterFuncField(sourceType, destType)
+	}
 	switch typ := sourceType.(type) {
 	case *types.Array:
 		dtype, ok := destType.(*types.Array)
@@ -1225,10 +1234,12 @@ func genAssignStmt(printer Printer,
 	destType := destValue.Type()
 
 	sourceTypeName := GetQualifiedTypeName(sourceType)
+	sourceIsNillable := IsNillableType(sourceType)
 	_, sourceIsPointer := sourceType.(*types.Pointer)
 	sourceIsPointerPreferable := IsPointerPreferableType(sourceType)
 	destTypeName := GetQualifiedTypeName(destType)
 	_, destIsPointer := destType.(*types.Pointer)
+	destIsNillable := IsNillableType(destType)
 	destIsPointerPreferable := IsPointerPreferableType(destType)
 
 	done := mctx.NextVarCount()
@@ -1242,9 +1253,9 @@ func genAssignStmt(printer Printer,
 	if cf != nil {
 		var argName string
 		switch {
-		case sourceIsPointer:
+		case sourceIsNillable:
 			argName = sourceSig
-		case !sourceIsPointer:
+		case !sourceIsNillable:
 			if sourceValue.CanAddr() {
 				argName = "&(" + sourceSig + ")"
 			} else {
@@ -1259,9 +1270,9 @@ func genAssignStmt(printer Printer,
 			p("    return err")
 			p("  } else {")
 			switch {
-			case destIsPointer:
+			case destIsNillable:
 				p(destValue.GetSetterSource("converted"))
-			case !destIsPointer:
+			case !destIsNillable:
 				p("if converted != nil {")
 				p(destValue.GetSetterSource("*converted"))
 				p("}")
@@ -1272,13 +1283,13 @@ func genAssignStmt(printer Printer,
 			p("    return err")
 			p("  } else {")
 			switch {
-			case destIsPointer:
+			case destIsNillable:
 				p("if isnil {")
 				p(destValue.GetSetterSource("nil"))
 				p("} else {")
 				p(destValue.GetSetterSource("&converted"))
 				p("}")
-			case !destIsPointer:
+			case !destIsNillable:
 				p("if !isnil {")
 				p(destValue.GetSetterSource("converted"))
 				p("}")
@@ -1288,7 +1299,8 @@ func genAssignStmt(printer Printer,
 
 		p("}")
 	}
-	// custom mapper only works when no custom converter is available.
+
+	// mappers are applied only both source and dest are structs or struct pointers
 	if mf != nil {
 		var argName string
 		guard := ""
@@ -1349,13 +1361,13 @@ func genAssignStmt(printer Printer,
 			p("done%d = true", done)
 		}
 		switch {
-		case sourceIsPointer && destIsPointer:
+		case sourceIsNillable && destIsNillable:
 			p(destValue.GetSetterSource(sourceSig))
-		case sourceIsPointer && !destIsPointer:
+		case sourceIsNillable && !destIsNillable:
 			p("if (%s) != nil {", sourceSig)
 			p(destValue.GetSetterSource("*(" + sourceSig + ")"))
 			p("}")
-		case !sourceIsPointer && destIsPointer:
+		case !sourceIsNillable && destIsNillable:
 			if sourceValue.CanAddr() {
 				p(destValue.GetSetterSource("&(" + sourceSig + ")"))
 			} else {
@@ -1363,7 +1375,7 @@ func genAssignStmt(printer Printer,
 				p("s%d := ", a, sourceSig)
 				p(destValue.GetSetterSource(fmt.Sprintf("&s%d", a)))
 			}
-		case !sourceIsPointer && !destIsPointer:
+		case !sourceIsNillable && !destIsNillable:
 			p(destValue.GetSetterSource(sourceSig))
 
 		}

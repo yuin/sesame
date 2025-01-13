@@ -29,6 +29,7 @@ func mustTime(s string) time.Time {
 func TestTodoMapper(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringConverter(mappers)
+	mapper.AddInfToStringConverter(mappers)
 	ctx := context.TODO()
 
 	obj, err := mappers.Get("TodoMapper")
@@ -49,6 +50,7 @@ func TestTodoMapper(t *testing.T) {
 		Tags:         [5]string{"Task"},
 		Done:         false,
 		UpdatedAt:    "2023-07-18T10:15:36Z",
+		Inf:          "hoge",
 		ValidateOnly: true,
 	}
 	source.SetPrivateValue(10)
@@ -72,6 +74,7 @@ func TestTodoMapper(t *testing.T) {
 		Tags:      [5]string{"Task"},
 		Finished:  false,
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
+		Inf:       &domain.InfV{"hoge"},
 	}
 	expected.SetPrivateValue(10)
 

@@ -193,10 +193,31 @@ func IsPointerPreferableType(typ types.Type) bool {
 	return true
 }
 
+// IsNillableType returns true if given type can be nil.
+func IsNillableType(typ types.Type) bool {
+	if named, ok := typ.(*types.Named); ok {
+		return IsNillableType(named.Obj().Type().Underlying())
+	}
+	if _, ok := typ.(*types.Interface); ok {
+		return true
+	}
+	if _, ok := typ.(*types.Pointer); ok {
+		return true
+	}
+	return false
+}
+
 // GetPreferableTypeSource returns
 //   - If type is defined in the universe, a type without pointer
+//   - If type is an interface, a type without pointer
 //   - Otherwise, a type with pointer
 func GetPreferableTypeSource(typ types.Type, mctx *MappingContext) string {
+	if named, ok := typ.(*types.Named); ok {
+		if _, iok := named.Obj().Type().Underlying().(*types.Interface); iok {
+			return GetSource(named, mctx)
+		}
+	}
+
 	if ptyp, ok := typ.(*types.Pointer); ok {
 		if IsBuiltinType(typ) {
 			return GetSource(ptyp.Elem(), mctx)
@@ -211,6 +232,28 @@ func GetPreferableTypeSource(typ types.Type, mctx *MappingContext) string {
 
 // GetPointerTypeSource returns a source code of a type with a pointer.
 func GetPointerTypeSource(typ types.Type, mctx *MappingContext) string {
+	if named, ok := typ.(*types.Named); ok {
+		if _, iok := named.Obj().Type().Underlying().(*types.Interface); iok {
+			return "*" + GetSource(named, mctx)
+		}
+	}
+
+	if ptyp, ok := typ.(*types.Pointer); ok {
+		return "*" + GetSource(ptyp.Elem(), mctx)
+	}
+	return "*" + GetSource(typ, mctx)
+}
+
+// GetNillableTypeSource returns a source code of a nillable type.
+//
+// - If type is an interface, a type without pointer
+// - Otherwise, a type with pointer.
+func GetNillableTypeSource(typ types.Type, mctx *MappingContext) string {
+	if named, ok := typ.(*types.Named); ok {
+		if _, iok := named.Obj().Type().Underlying().(*types.Interface); iok {
+			return GetSource(named, mctx)
+		}
+	}
 	if ptyp, ok := typ.(*types.Pointer); ok {
 		return "*" + GetSource(ptyp.Elem(), mctx)
 	}
