@@ -2,6 +2,7 @@ package sesame
 
 const mapperGetterSrc = `interface {
 	Get(name string) (any, error)
+	GetAllMappers() (map[string]any, error)
 	GetMapperFunc(sourceName string, destName string) (any, error)
 	GetConverterFunc(sourceName string, destName string) (any, error)
 }`
@@ -80,6 +81,9 @@ type Mappers interface {
 
 	// Get returns an object with given name.
 	Get(name string) (any, error)
+
+	// GetAllMappers returns an all mappers
+	GetAllMappers() (map[string]any, error)
 
 	// GetMapperFunc returns a mapper function with given types.
 	GetMapperFunc(sourceName string, destName string) (any, error)
@@ -238,6 +242,44 @@ func (d *mappers) Get(name string) (any, error) {
 	}
 	obj, _ := d.dependencies.Load(name)
 	return obj, nil
+}
+
+func (d *mappers) GetAllMappers() (map[string]any, error) {
+	mappers := map[string]any{}
+	var err error
+	var names []string
+	d.dependencies.Range(func(key, value any) bool {
+		names = append(names, key.(string))
+		return true
+	})
+	d.factories.Range(func(key, value any) bool {
+		names = append(names, key.(string))
+		return true
+	})
+	for _, name := range names {
+		if strings.HasSuffix(name, "Mapper") && !strings.Contains(name, ":") {
+		    mappers[name], err = d.Get(name)
+		    if err != nil {
+		    	return nil, err
+		    }
+	    }
+	}
+	if d.parent != nil {
+		pmappers, err := d.parent.GetAllMappers()
+		if err != nil {
+			return nil, err
+		}
+	    for k, v := range pmappers {
+			mappers[k] = v
+		}
+	}
+	return mappers, nil
+}
+
+func (d *concurrentMappers) GetAllMappers() (map[string]any, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return d.mappers.GetAllMappers()
 }
 
 func (d *mappers) AddFactory(name string, factory func(MapperGetter) (any, error)) {
