@@ -4,7 +4,8 @@ mappers:
   nil-map: empty
   nil-slice: empty
 mappings:
-  - name: TodoMapper
+  - id: testdata.TodoMapper
+    name: TodoMapper
     package: mapper
     destination: ./mapper/todo_mapper_gen.go
     bidirectional: true

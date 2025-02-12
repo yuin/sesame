@@ -160,6 +160,10 @@ func (m *Mappers) ConfigLoaded(path string) []error {
 
 // Mapping is a definition of the mapping.
 type Mapping struct {
+	// ID is an ID of a mapper.
+	// If this is empty, Name will be used as an ID.
+	ID string
+
 	// Name is a name of a mapper.
 	Name string
 
@@ -211,6 +215,9 @@ func (m *Mapping) ConfigLoaded(path string) []error {
 	}
 	if m.B == nil {
 		errs = append(errs, fmt.Errorf("%s:\t%s.b must not be empty", m.SourceFile, path))
+	}
+	if len(m.ID) == 0 {
+		m.ID = m.Name
 	}
 	return errs
 }
@@ -690,6 +697,7 @@ func NewGenerator(config *Generation) Generator {
 }
 
 type mapperFunc struct {
+	id          string
 	name        string
 	mappersName string
 	funcName    string
@@ -818,7 +826,7 @@ func (g *generator) Generate() error {
 			p("  m := &%s{", mapping.PrivateName())
 			p("    mapperGetter: mapperGetter,")
 			p("  }")
-			p("  helper, err := m.mapperGetter.Get(\"%sHelper\")", mapping.Name)
+			p("  helper, err := m.mapperGetter.Get(\"%sHelper\")", mapping.ID)
 			p("  if err == nil {")
 			p("    m.helper = helper.(%sHelper)", mapping.Name)
 			p("  }")
@@ -854,6 +862,7 @@ func (g *generator) Generate() error {
 			mappersContext.AddImport(absPkg)
 
 			mapperFuncs = append(mapperFuncs, &mapperFunc{
+				id:          mapping.ID,
 				name:        mapping.Name,
 				mappersName: mappersName(a.Type(), b.Type()),
 				funcName:    mapping.MethodName(OperandA),
@@ -861,6 +870,7 @@ func (g *generator) Generate() error {
 			})
 			if mapping.Bidirectional {
 				mapperFuncs = append(mapperFuncs, &mapperFunc{
+					id:          mapping.ID,
 					name:        mapping.Name,
 					mappersName: mappersName(b.Type(), a.Type()),
 					funcName:    mapping.MethodName(OperandB),
@@ -941,17 +951,16 @@ func genMappers(mappers *Mappers, mapperFuncs []*mapperFunc, mctx *MappingContex
 		}
 
 		if _, ok := added[m.name]; !ok {
-			ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms MapperGetter) (any, error) {`, m.name))
+			a := mctx.NextVarCount()
+			typeVar := fmt.Sprintf(`typ%d`, a)
+			ms = append(ms, fmt.Sprintf(`var %s %s%s`, typeVar, prefix, m.name))
+
+			ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", &%s, func(ms MapperGetter) (any, error) {`,
+				m.id, typeVar))
 			ms = append(ms, fmt.Sprintf("return %sNew%s(ms), nil", prefix, m.name))
 			ms = append(ms, "})")
 			added[m.name] = struct{}{}
 		}
-		ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", func(ms MapperGetter) (any, error) {`, m.mappersName))
-		ms = append(ms, fmt.Sprintf(`obj, err := ms.Get("%s")`, m.name))
-		ms = append(ms, `if err != nil { return nil, err }`)
-		ms = append(ms, fmt.Sprintf(`mapper, _ :=obj.(%s%s)`, prefix, m.name))
-		ms = append(ms, fmt.Sprintf(`return mapper.%s, nil`, m.funcName))
-		ms = append(ms, `})`)
 	}
 	printer.ResolveVar("MAPPERS", strings.Join(ms, "\n"))
 

@@ -149,7 +149,9 @@ mappers:                                         # configurations for a mapper c
   nil-map: nil                                   # how are nil collections mapped
   nil-slice: nil                                 #   a value should be one of 'nil', 'empty' (default: nil)
 mappings:                                        # configurations for object-to-object mappings
-  - name: TodoMapper                             # name of the mapper. This must be unique within all mappers
+  - name: TodoMapper                             # name of the mapper
+    id:   mymappers.TodoMappers                  # id of the mapper. This must be unique within all mappers.
+                                                 # if id is not set, name will be used as id.
     package: mapper                              # package name for generated mapper
     destination: ./mapper/todo_mapper_gen.go     # definition for generation
     bidirectional: true                          # generates a-to-b and b-to-a mapping if true(default: false)
@@ -215,7 +217,7 @@ Mapping codes look like the following:
 
 1. Create new Mappers object as a singleton object. The Mappers object is a groutine-safe.
 
-   ````go
+   ```go
    mappers := mapper.NewMappers()           // Creates new Mappers object
    mapper.AddTimeToStringConverter(mappers)    // Add converter
    mappers.Add("TodoMapperHelper", &todoMapperHelper{}) // Add helpers
@@ -275,25 +277,6 @@ func AddTimeToStringConverter(mappers interface {
 ```
 
 
-If a converter depends other converters or mappers, you can use `AddFactory` and `AddConverterFuncFactory`.
-
-```
-	mappers.AddFactory("TimeStringConverter", func(g MapperGetter) (any, error) {
-		otherConverter, _ = g.Get("OtherConverter")
-		return &TimeStringConverter{otherConverter: otherConverter.(OtherConverter)}, nil
-	})
-	mappers.AddConverterFuncFactory("string", "time#Time", func(g MapperGetter) (any, error) {
-		conv, _ = g.Get("TimeStringConverter")
-		return conv.(TimeStringConverter).StringToTime, nil
-	})
-	mappers.AddConverterFuncFactory("time#Time", "string", func(g MapperGetter) (any, error) {
-		conv, _ = g.Get("TimeStringConverter")
-		return conv.(TimeStringConverter).TimeToString, nil
-	})
-```
-
-`Mappers.Add` finds given converter methods name like 'XxxToYyy' and calls `AddConverterFuncFactory`.
-
 ### Helpers
 You can define helper functions for more complex mappings.
 
@@ -318,22 +301,24 @@ func (h *todoMapperHelper) EntityToModel(ctx context.Context, source *domain.Tod
 }
 ```
 
-and register it as `{MAPPER_NAME}Helper`:
+and register it as `{MAPPER_ID}Helper`:
 
 ```go
 mappers.Add("TodoMapperHelper", &todoMapperHelper{})
 ```
 
-or
+Helpers will be called at the end of the generated mapping implementations.
+
+### Lazy loading/Mapper depends on other mappers
+`AddFactory` method allows you to define a factory function that returns a mapper object.
 
 ```go
-mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
-    // you can get other mappers or helpers from MapperGetter here
-    return &todoMapperHelper{}, nil
+var mt MyMapper
+mappers.AddFactory("MyMapper", &mt, func(mg MapperGetter) (any, error) {
+    otherMapper, _ := mg.Get("OtherMapper")
+    return &MyMapper{OtherMapper: otherMapper}, nil
 })
 ```
-
-Helpers will be called at the end of the generated mapping implementations.
 
 ### Multiple mappers and converters for same type combinations
 sesame does not allow to define multiple mappers and converts for same type combinations.
@@ -342,7 +327,7 @@ If you want to define multiple mappers and converts for same type combinations
 1. Set `ignore` to `true` for the field in the configuration file.
 2. Manually map or convert field in Helper.
 
-### Hierarchized mappers
+### Merge mappers
 Large applications often consist of multiple go modules.
 
 ```
@@ -366,17 +351,15 @@ Large applications often consist of multiple go modules.
 - `lib` defines common mappers like 'StringTimeMapper' .
 - `gRPC` defines gRPC spcific mappers that maps `protoc` generated models to domain entities
 
-You can hierarchize mappers by a delegation like the following:
+You can merge mappers like the following:
 
 ```go
-func NewDefaultMappers(parent Mappers) Mappers {
-	m := NewMappers(parent)
-    // Add gRPC specific mappers and helpers
-    return m
-}
-
-// mappers := grpc_mappers.NewDefaultMappers(lib_mappers.NewMappers())
+grpcMappers := grpc_mappers.NewMappers()
+err := grpcMappers.Merge(domain_mappers.NewMappers())
+// Now grpcMappers has all mappers defined in domain_mappers and grpc_mappers
 ```
+
+Note that merging must be done before any `Get` calls.
 
 ## Donation
 BTC: 1NEDSyUmo4SMTDP83JJQSWi1MvQUGGNMZB

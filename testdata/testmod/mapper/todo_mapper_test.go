@@ -32,7 +32,7 @@ func TestTodoMapper(t *testing.T) {
 	mapper.AddInfToStringConverter(mappers)
 	ctx := context.TODO()
 
-	obj, err := mappers.Get("TodoMapper")
+	obj, err := mappers.Get("testdata.TodoMapper")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,11 +133,9 @@ func TestMapperHelper(t *testing.T) {
 	mapper.AddTimeToStringConverter(mappers)
 	ctx := context.TODO()
 
-	mappers.AddFactory("TodoMapperHelper", func(ms MapperGetter) (any, error) {
-		return &todoMapperHelper{}, nil
-	})
+	mappers.Add("testdata.TodoMapperHelper", &todoMapperHelper{})
 
-	obj, err := mappers.Get("TodoMapper")
+	obj, err := mappers.Get("testdata.TodoMapper")
 	if err != nil {
 		t.Fatal(err)
 	}
