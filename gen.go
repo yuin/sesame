@@ -951,12 +951,9 @@ func genMappers(mappers *Mappers, mapperFuncs []*mapperFunc, mctx *MappingContex
 		}
 
 		if _, ok := added[m.name]; !ok {
-			a := mctx.NextVarCount()
-			typeVar := fmt.Sprintf(`typ%d`, a)
-			ms = append(ms, fmt.Sprintf(`var %s %s%s`, typeVar, prefix, m.name))
-
-			ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", &%s, func(ms MapperGetter) (any, error) {`,
-				m.id, typeVar))
+			typeName := fmt.Sprintf("%s%s", prefix, m.name)
+			ms = append(ms, fmt.Sprintf(`NewTypedMappers[%s](mappers).AddFactory("%s", func(ms MapperGetter) (%s, error) {`,
+				typeName, m.id, typeName))
 			ms = append(ms, fmt.Sprintf("return %sNew%s(ms), nil", prefix, m.name))
 			ms = append(ms, "})")
 			added[m.name] = struct{}{}

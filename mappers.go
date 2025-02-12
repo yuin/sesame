@@ -43,19 +43,7 @@ type Mappers = interface {
     Add(name string, mapper any)
 
 	// AddFactory adds given object factory to this mappers.
-	// factory is lazly called when Get method is called.
-	// So it is useful for reducing initialization time.
-	// typ must be a pointer to the object type that returns by given factory.
-	//
-	// Example: MyMapper is a struct or an interface
-	//
-	//     var mymapper MyMapper
-	//     mappers.AddFactory("MyMapper", &mymapper, func(MapperGetter) (any, error) {
-	//         // do heavy initialization
-	//	       return mymapper, nil
-	//     })
-    //
-	AddFactory(name string, typ any, factory func(MapperGetter) (any, error))
+	AddFactory(name string, typ reflect.Type, factory func(MapperGetter) (any, error))
 
 	// Get returns an object with given name.
 	Get(name string) (any, error)
@@ -110,8 +98,7 @@ func (d *mappers) UnsafeFactories () *sync.Map {
 	return &d.factories
 }
 
-func (d *mappers) Add(name string, obj any) {
-	d.dependencies.Store(name, obj)
+func (d *mappers) addMethods(name string, typ reflect.Type) {
     loc := mapperNameVersionSuffixPattern.FindAllStringIndex(name, -1)
 	if len(loc) > 0 {
         lastMatch := loc[len(loc)-1]
@@ -128,16 +115,19 @@ func (d *mappers) Add(name string, obj any) {
 	if strings.HasPrefix(name, "converterFunc:") {
 		return
 	}
-	typ := reflect.TypeOf(obj)
+	offset := 1 
+	if typ.Kind() == reflect.Interface {
+		offset = 0
+	}
     if strings.HasSuffix(name, "Converter") {
 		for i := 0; i < typ.NumMethod(); i++ {
 			method := typ.Method(i)
 			if mapperFuncNamePattern.MatchString(method.Name) {
-				ft := reflect.TypeOf(method.Func.Interface())
-				if ft.NumIn() != 3 || (ft.NumOut() != 2 && ft.NumOut() != 3) {
+				ft := method.Type
+				if ft.NumIn() != (2+offset) || (ft.NumOut() != 2 && ft.NumOut() != 3) {
 					continue
 				}
-				in := ft.In(2)
+				in := ft.In(1+offset)
 				if in.Kind() == reflect.Ptr {
 					in = in.Elem()
 				}
@@ -163,15 +153,15 @@ func (d *mappers) Add(name string, obj any) {
 		for i := 0; i < typ.NumMethod(); i++ {
 			method := typ.Method(i)
 			if mapperFuncNamePattern.MatchString(method.Name) {
-				ft := reflect.TypeOf(method.Func.Interface())
-				if ft.NumIn() != 4 || ft.NumOut() != 1 {
+				ft := method.Type
+				if ft.NumIn() != (3+offset) || ft.NumOut() != 1 {
 					continue
 				}
-				in := ft.In(2)
+				in := ft.In(1+offset)
 				if in.Kind() == reflect.Ptr {
 					in = in.Elem()
 				}
-				out := ft.In(3)
+				out := ft.In(2+offset)
 				if out.Kind() == reflect.Ptr {
 					out = out.Elem()
 				}
@@ -194,6 +184,11 @@ func (d *mappers) Add(name string, obj any) {
 	}
 }
 
+func (d *mappers) Add(name string, obj any) {
+	d.dependencies.Store(name, obj)
+	d.addMethods(name, reflect.TypeOf(obj))
+}
+
 func (d *concurrentMappers) Get(name string) (any, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -212,7 +207,7 @@ func (d *mappers) Get(name string) (any, error) {
 				}
 				return nil, fmt.Errorf("Failed to create a mapper: %%w", merr)
 			}
-			d.Add(name, obj)
+			d.dependencies.Store(name, obj)
 		} else {
 			merr := &merror {
 				error: fmt.Errorf("Object %%s not found", name),
@@ -254,12 +249,11 @@ func (d *concurrentMappers) GetAllMappers() (map[string]any, error) {
 	return d.mappers.GetAllMappers()
 }
 
-func (d *mappers) AddFactory(name string, typ any, factory func(MapperGetter) (any, error)) {
-	d.Add(name, typ)
-	d.dependencies.Delete(name)
+func (d *mappers) AddFactory(name string, typ reflect.Type, factory func(MapperGetter) (any, error)) {
 	d.factories.Store(name, func(di MapperGetter) (any, error) {
 		return factory(di)
 	})
+	d.addMethods(name, typ)
 }
 
 func (d *mappers) addMapperFuncFactory(sourceName string, destName string, factory func(MapperGetter) (any, error)) {
@@ -302,4 +296,42 @@ func (d *mappers) Merge(other MapperGetter) error {
 	})
 	return nil
 }
+
+// TypedMappers is a type-safe mappers.
+type TypedMappers[T any] struct {
+	m Mappers
+}
+
+// NewTypedMappers returns a new TypedMappers.
+func NewTypedMappers[T any](m Mappers) TypedMappers[T] {
+	return TypedMappers[T]{m: m}
+}
+
+// AddFactory adds a factory function to this mappers.
+func (t TypedMappers[T]) AddFactory(name string, factory func(MapperGetter) (T, error)) {
+	var v T
+	rt := reflect.TypeOf(&v)
+	if rt.Elem().Kind() == reflect.Interface || rt.Elem().Kind() == reflect.Ptr {
+		rt = rt.Elem()
+	} 
+
+	t.m.AddFactory(name, rt, func(mg MapperGetter) (any, error) {
+		return factory(mg)
+	})
+}
+
+// Get returns an object with given name.
+func (t TypedMappers[T]) Get(name string) (T, error) {
+    var iv T
+	obj, err := t.m.Get(name)
+	if err != nil {
+		return iv, err
+	}
+	v, ok := obj.(T)
+	if !ok {
+		return iv, fmt.Errorf("object %%s is not a %%T", name, iv)
+	}
+	return v, nil
+}
+
 `

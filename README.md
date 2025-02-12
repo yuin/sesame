@@ -235,6 +235,12 @@ Mapping codes look like the following:
    err := todoMapper.ModelToEntity(ctx, model, &entity) 
    ```
 
+   `TypedMappers` is a helper object that provides type-safe `Get` method.
+
+   ```go
+   todoMapper, err := NewTypedMappers[TodoMapper](mappers).Get("TodoMapper")
+   ```
+
 ### Add Converters
 By default, sesame can map following types:
 
@@ -312,11 +318,28 @@ Helpers will be called at the end of the generated mapping implementations.
 ### Lazy loading/Mapper depends on other mappers
 `AddFactory` method allows you to define a factory function that returns a mapper object.
 
+interfaces:
+
 ```go
-var mt MyMapper
-mappers.AddFactory("MyMapper", &mt, func(mg MapperGetter) (any, error) {
-    otherMapper, _ := mg.Get("OtherMapper")
-    return &MyMapper{OtherMapper: otherMapper}, nil
+type MyMapper interface {
+    // ...
+}
+
+NewTypedMappers[MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (MyMapper, error) {
+    // you can get other mappers and converts from m
+    return &myMapper{}, nil
+})
+```
+
+structs:
+
+```go
+type MyMapper struct {
+    // ...
+}
+
+NewTypedMappers[*MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (`MyMapper, error) {
+    return &MyMapper{}, nil
 })
 ```
 
