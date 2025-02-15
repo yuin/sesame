@@ -131,9 +131,9 @@ Note that a source argument can be nil.
 
 ### Naming convention
 
-- Mapper name must end with "Mapper" like "TodoMapper"
-- Converter name must end with "Converter" like "TimeStringConverter"
-- Helper name must end with "Helper" like "TodoMapperHelper"
+- Mapper id must end with "Mapper" like "TodoMapper"
+- Converter id  must end with "Converter" like "TimeStringConverter"
+- Helper id must be "${MAPPER_ID}Helper"
 - Mapper function name must be "XxxToYyy"
 - Converter function name must be "XxxToYyy"
 
@@ -338,8 +338,19 @@ type MyMapper struct {
     // ...
 }
 
-NewTypedMappers[*MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (`MyMapper, error) {
+NewTypedMappers[*MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (*MyMapper, error) {
     return &MyMapper{}, nil
+})
+```
+
+Since `NewTypedMapper` is defined in mappers package, so you can not use it bacause cyclic imports depends on your package structure.
+
+You can add factories using reflections instead of `NewTypedMappers`:
+
+```go
+var t MyMapper // MyMapper can be a struct or an interface
+mappers.AddFactory("MyMapper", reflect.TypeOf(&t), func(m MapperGetter) (any, error) {
+    return &myMapper{}, nil
 })
 ```
 

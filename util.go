@@ -18,7 +18,7 @@ func GetMethod(nm *types.Named, name string, ignoreCase bool) (*types.Func, bool
 	for i := 0; i < nm.NumMethods(); i++ {
 		f := nm.Method(i)
 		if (f.Name() == name) ||
-			(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(name)) {
+			(ignoreCase && strings.EqualFold(f.Name(), name)) {
 			return f, true
 		}
 	}
@@ -33,7 +33,7 @@ func GetField(st *types.Struct, name string, ignoreCase bool) (*types.Var, bool)
 		for i := 0; i < st.NumFields(); i++ {
 			f := st.Field(i)
 			if (f.Name() == parts[0]) ||
-				(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(parts[0])) {
+				(ignoreCase && strings.EqualFold(f.Name(), parts[0])) {
 				s, ok := GetStructType(f.Type())
 				if !ok {
 					return nil, false
@@ -45,7 +45,7 @@ func GetField(st *types.Struct, name string, ignoreCase bool) (*types.Var, bool)
 		for i := 0; i < st.NumFields(); i++ {
 			f := st.Field(i)
 			if (f.Name() == name) ||
-				(ignoreCase && strings.ToLower(f.Name()) == strings.ToLower(name)) {
+				(ignoreCase && strings.EqualFold(f.Name(), name)) {
 				return f, true
 			}
 		}
@@ -317,12 +317,8 @@ func getQualifiedTypeName(typ types.Type) string {
 	}
 }
 
-func mappersName(sourceType, destType types.Type) string {
-	return fmt.Sprintf("mapperFunc:%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
-}
-
-func convertersName(sourceType, destType types.Type) string {
-	return fmt.Sprintf("converterFunc:%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
+func funcObjectName(sourceType, destType types.Type) string {
+	return fmt.Sprintf("func:%s:%s", GetQualifiedTypeName(sourceType), GetQualifiedTypeName(destType))
 }
 
 var modulePattern = regexp.MustCompile(`^\s*module\s*(.*)`)
@@ -369,7 +365,8 @@ func isModPackage(pkg string) bool {
 	if filepath.IsAbs(pkg) {
 		return false
 	}
-	if strings.Contains(pkg, "./") || strings.Contains(pkg, "../") || strings.Contains(pkg, ".\\") || strings.Contains(pkg, "..\\") {
+	if strings.Contains(pkg, "./") || strings.Contains(pkg, "../") ||
+		strings.Contains(pkg, ".\\") || strings.Contains(pkg, "..\\") {
 		return false
 	}
 

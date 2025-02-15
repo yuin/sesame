@@ -1,10 +1,10 @@
 package sesame
 
 const mapperGetterSrc = `interface {
-	Get(name string) (any, error)
+	Get(id string) (any, error)
 	GetAllMappers() (map[string]any, error)
-	GetMapperFunc(sourceName string, destName string) (any, error)
-	GetConverterFunc(sourceName string, destName string) (any, error)
+	GetFunc(sourceType reflect.Type, destType reflect.Type) (any, error)
+	GetFuncByTypeName(sourceName string, destName string) (any, error)
 }`
 
 const mappersSrc = `
@@ -33,29 +33,49 @@ func (e *merror) Unwrap() error {
 type MapperGetter = ` + mapperGetterSrc + `
 
 // Mappers is a collection of mappers.
-// Mapper name must end with 'Mapper'.
-// Converter name must end with 'Converter'.
-// MapperHelper name must end with 'Helper'.
+// Mapper id must end with 'Mapper'.
+// Converter id must end with 'Converter'.
+// MapperHelper id must end with 'Helper'.
 type Mappers = interface {
 	// Add adds given object to this mappers.
 	// Methods name like 'XxxxToYyyy' is automatically registered
 	// as mapper or converter funcs.
-    Add(name string, mapper any)
+	Add(id string, mapper any)
 
 	// AddFactory adds given object factory to this mappers.
-	AddFactory(name string, typ reflect.Type, factory func(MapperGetter) (any, error))
+	//
+	//     var mapper MyMapper
+	//     f, err := mappers.AddFactory("MyMapper", reflect.TypeOf(&mapper), func(mg MapperGetter) (any, error) {
+	//                   return &myMapper{}, nil
+	//     })
+	AddFactory(id string, typ reflect.Type, factory func(MapperGetter) (any, error))
 
-	// Get returns an object with given name.
-	Get(name string) (any, error)
+	// Get returns an object with given id.
+	Get(id string) (any, error)
 
 	// GetAllMappers returns an all mappers
 	GetAllMappers() (map[string]any, error)
 
-	// GetMapperFunc returns a mapper function with given types.
-	GetMapperFunc(sourceName string, destName string) (any, error)
+	// GetFunc returns a mapper/converter function with given types.
+	//
+	//     var source MyType
+	//     var dest   DestType
+	//     f, err := mappers.GetFunc(reflect.TypeOf(&source), reflect.TypeOf(&dest))
+	//
+	// If source and dest are struct types, GetFunc will return a mapper function.
+	// Otherwise, it will return a converter function.
+	GetFunc(sourceType reflect.Type, destType reflect.Type) (any, error)
 
-	// GetConverterFunc returns a converter function with given types.
-	GetConverterFunc(sourceName string, destName string) (any, error)
+	// GetFuncByTypeName returns a function with given type names.
+	// Type names are package path + "# + type name.
+	//
+	// Example: "github.com/xxx/pkg#MyType"
+	//
+	// Note that type names are always not a pointer type.
+	// Since this method is mainly used for auto-generated mappers,
+	// a type name format may change in the future.
+	// So, it is recommended to use GetFunc instead of GetFuncByTypeName.
+	GetFuncByTypeName(sourceName string, destName string) (any, error)
 
 	// Merge merges given mappers into this mapper.
 	// If same name object is already exists in this mappers, it will be overwritten by given mappers.
@@ -87,7 +107,7 @@ func NewMappers() Mappers {
 
 }
 
-var mapperFuncNamePattern = regexp.MustCompile("[A-Z][\\w]+To[A-Z].*")
+var funcNamePatter = regexp.MustCompile("[A-Z][\\w]+To[A-Z].*")
 var mapperNameVersionSuffixPattern = regexp.MustCompile("[vV]\\d+")
 
 func (d *mappers) UnsafeDependencies () *sync.Map {
@@ -109,10 +129,7 @@ func (d *mappers) addMethods(name string, typ reflect.Type) {
 	if strings.HasSuffix(name, "Helper") {
 		return
 	}
-	if strings.HasPrefix(name, "mapperFunc:") {
-		return
-	}
-	if strings.HasPrefix(name, "converterFunc:") {
+	if strings.HasPrefix(name, "func:") {
 		return
 	}
 	offset := 1 
@@ -122,28 +139,14 @@ func (d *mappers) addMethods(name string, typ reflect.Type) {
     if strings.HasSuffix(name, "Converter") {
 		for i := 0; i < typ.NumMethod(); i++ {
 			method := typ.Method(i)
-			if mapperFuncNamePattern.MatchString(method.Name) {
+			if funcNamePatter.MatchString(method.Name) {
 				ft := method.Type
 				if ft.NumIn() != (2+offset) || (ft.NumOut() != 2 && ft.NumOut() != 3) {
 					continue
 				}
 				in := ft.In(1+offset)
-				if in.Kind() == reflect.Ptr {
-					in = in.Elem()
-				}
 				out := ft.Out(0)
-				if out.Kind() == reflect.Ptr {
-					out = out.Elem()
-				}
-				inName := in.Name()
-				if len(in.PkgPath()) != 0 {
-					inName = in.PkgPath() + "#" + inName
-				}
-				outName := out.Name()
-				if len(out.PkgPath()) != 0 {
-					outName = out.PkgPath() + "#" + outName
-				}
-				d.addConverterFuncFactory(inName, outName, func(mg MapperGetter) (any, error) {
+				d.addFuncFactory(in, out, func(mg MapperGetter) (any, error) {
 					obj, _ := mg.Get(name)
 				    return reflect.ValueOf(obj).MethodByName(method.Name).Interface(), nil
 				})
@@ -152,28 +155,14 @@ func (d *mappers) addMethods(name string, typ reflect.Type) {
 	} else if strings.HasSuffix(name, "Mapper") {
 		for i := 0; i < typ.NumMethod(); i++ {
 			method := typ.Method(i)
-			if mapperFuncNamePattern.MatchString(method.Name) {
+			if funcNamePatter.MatchString(method.Name) {
 				ft := method.Type
 				if ft.NumIn() != (3+offset) || ft.NumOut() != 1 {
 					continue
 				}
 				in := ft.In(1+offset)
-				if in.Kind() == reflect.Ptr {
-					in = in.Elem()
-				}
 				out := ft.In(2+offset)
-				if out.Kind() == reflect.Ptr {
-					out = out.Elem()
-				}
-				inName := in.Name()
-				if len(in.PkgPath()) != 0 {
-					inName = in.PkgPath() + "#" + inName
-				}
-				outName := out.Name()
-				if len(out.PkgPath()) != 0 {
-					outName = out.PkgPath() + "#" + outName
-				}
-				d.addMapperFuncFactory(inName, outName, func(mg MapperGetter) (any, error) {
+				d.addFuncFactory(in, out, func(mg MapperGetter) (any, error) {
 					obj, _ := mg.Get(name)
 				    return reflect.ValueOf(obj).MethodByName(method.Name).Interface(), nil
 				})
@@ -184,20 +173,20 @@ func (d *mappers) addMethods(name string, typ reflect.Type) {
 	}
 }
 
-func (d *mappers) Add(name string, obj any) {
-	d.dependencies.Store(name, obj)
-	d.addMethods(name, reflect.TypeOf(obj))
+func (d *mappers) Add(id string, obj any) {
+	d.dependencies.Store(id, obj)
+	d.addMethods(id, reflect.TypeOf(obj))
 }
 
-func (d *concurrentMappers) Get(name string) (any, error) {
+func (d *concurrentMappers) Get(id string) (any, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	return d.mappers.Get(name)
+	return d.mappers.Get(id)
 }
 
-func (d *mappers) Get(name string) (any, error) {
-	if v, ok := d.dependencies.Load(name); !ok || v == nil {
-		factory, fok := d.factories.Load(name)
+func (d *mappers) Get(id string) (any, error) {
+	if v, ok := d.dependencies.Load(id); !ok || v == nil {
+		factory, fok := d.factories.Load(id)
 		if fok && factory != nil {
 			obj, err := factory.(func(MapperGetter) (any, error))(d)
 			if err != nil {
@@ -207,34 +196,34 @@ func (d *mappers) Get(name string) (any, error) {
 				}
 				return nil, fmt.Errorf("Failed to create a mapper: %%w", merr)
 			}
-			d.dependencies.Store(name, obj)
+			d.dependencies.Store(id, obj)
 		} else {
 			merr := &merror {
-				error: fmt.Errorf("Object %%s not found", name),
+				error: fmt.Errorf("Object %%s not found", id),
 				notFound: true,
 			}
 			return nil, merr
 		}
 	}
-	obj, _ := d.dependencies.Load(name)
+	obj, _ := d.dependencies.Load(id)
 	return obj, nil
 }
 
 func (d *mappers) GetAllMappers() (map[string]any, error) {
 	mappers := map[string]any{}
 	var err error
-	var names []string
+	var ids []string
 	d.dependencies.Range(func(key, value any) bool {
-		names = append(names, key.(string))
+		ids = append(ids, key.(string))
 		return true
 	})
 	d.factories.Range(func(key, value any) bool {
-		names = append(names, key.(string))
+		ids = append(ids, key.(string))
 		return true
 	})
-	for _, name := range names {
-		if strings.HasSuffix(name, "Mapper") && !strings.Contains(name, ":") {
-		    mappers[name], err = d.Get(name)
+	for _, id := range ids {
+		if strings.HasSuffix(id, "Mapper") && !strings.Contains(id, ":") {
+		    mappers[id], err = d.Get(id)
 		    if err != nil {
 		    	return nil, err
 		    }
@@ -249,31 +238,29 @@ func (d *concurrentMappers) GetAllMappers() (map[string]any, error) {
 	return d.mappers.GetAllMappers()
 }
 
-func (d *mappers) AddFactory(name string, typ reflect.Type, factory func(MapperGetter) (any, error)) {
-	d.factories.Store(name, func(di MapperGetter) (any, error) {
+func (d *mappers) AddFactory(id string, typ reflect.Type, factory func(MapperGetter) (any, error)) {
+	d.factories.Store(id, func(di MapperGetter) (any, error) {
 		return factory(di)
 	})
-	d.addMethods(name, typ)
+	d.addMethods(id, typ)
 }
 
-func (d *mappers) addMapperFuncFactory(sourceName string, destName string, factory func(MapperGetter) (any, error)) {
-	d.factories.Store("mapperFunc:"+sourceName+":"+destName, func(di MapperGetter) (any, error) {
-		return factory(di)
-	})
-}
-
-func (d *mappers) addConverterFuncFactory(sourceName string, destName string, factory func(MapperGetter) (any, error)) {
-	d.factories.Store("converterFunc:"+sourceName+":"+destName, func(di MapperGetter) (any, error) {
+func (d *mappers) addFuncFactory(sourceType ,destType reflect.Type, factory func(MapperGetter) (any, error)) {
+	sourceName := d.toTypeName(sourceType)
+	destName := d.toTypeName(destType)
+	d.factories.Store("func:"+sourceName+":"+destName, func(di MapperGetter) (any, error) {
 		return factory(di)
 	})
 }
 
-func (d *mappers) GetMapperFunc(sourceName string, destName string) (any, error) {
-	return d.Get("mapperFunc:"+sourceName + ":" + destName)
+func (d *mappers) GetFunc(sourceType, destType reflect.Type) (any, error) {
+	sourceName := d.toTypeName(sourceType)
+	destName := d.toTypeName(destType)
+	return d.GetFuncByTypeName(sourceName, destName)
 }
 
-func (d *mappers) GetConverterFunc(sourceName string, destName string) (any, error) {
-	return d.Get("converterFunc:"+sourceName + ":" + destName)
+func (d *mappers) GetFuncByTypeName(sourceName, destName string) (any, error) {
+	return d.Get("func:"+sourceName + ":" + destName)
 }
 
 func (d *mappers) Merge(other MapperGetter) error {
@@ -297,6 +284,17 @@ func (d *mappers) Merge(other MapperGetter) error {
 	return nil
 }
 
+func (d *mappers) toTypeName(typ reflect.Type) string {
+    if typ.Kind() == reflect.Ptr {
+    	typ = typ.Elem()
+    }
+    name := typ.Name()
+    if len(typ.PkgPath()) != 0 {
+    	name = typ.PkgPath() + "#" + name
+    }
+	return name
+}
+
 // TypedMappers is a type-safe mappers.
 type TypedMappers[T any] struct {
 	m Mappers
@@ -308,28 +306,28 @@ func NewTypedMappers[T any](m Mappers) TypedMappers[T] {
 }
 
 // AddFactory adds a factory function to this mappers.
-func (t TypedMappers[T]) AddFactory(name string, factory func(MapperGetter) (T, error)) {
+func (t TypedMappers[T]) AddFactory(id string, factory func(MapperGetter) (T, error)) {
 	var v T
 	rt := reflect.TypeOf(&v)
 	if rt.Elem().Kind() == reflect.Interface || rt.Elem().Kind() == reflect.Ptr {
 		rt = rt.Elem()
 	} 
 
-	t.m.AddFactory(name, rt, func(mg MapperGetter) (any, error) {
+	t.m.AddFactory(id, rt, func(mg MapperGetter) (any, error) {
 		return factory(mg)
 	})
 }
 
-// Get returns an object with given name.
-func (t TypedMappers[T]) Get(name string) (T, error) {
+// Get returns an object with given id.
+func (t TypedMappers[T]) Get(id string) (T, error) {
     var iv T
-	obj, err := t.m.Get(name)
+	obj, err := t.m.Get(id)
 	if err != nil {
 		return iv, err
 	}
 	v, ok := obj.(T)
 	if !ok {
-		return iv, fmt.Errorf("object %%s is not a %%T", name, iv)
+		return iv, fmt.Errorf("object %%s is not a %%T", id, iv)
 	}
 	return v, nil
 }

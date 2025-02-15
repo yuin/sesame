@@ -697,11 +697,11 @@ func NewGenerator(config *Generation) Generator {
 }
 
 type mapperFunc struct {
-	id          string
-	name        string
-	mappersName string
-	funcName    string
-	pkg         string
+	id             string
+	name           string
+	funcObjectName string
+	funcName       string
+	pkg            string
 }
 
 func (g *generator) Generate() error {
@@ -862,19 +862,19 @@ func (g *generator) Generate() error {
 			mappersContext.AddImport(absPkg)
 
 			mapperFuncs = append(mapperFuncs, &mapperFunc{
-				id:          mapping.ID,
-				name:        mapping.Name,
-				mappersName: mappersName(a.Type(), b.Type()),
-				funcName:    mapping.MethodName(OperandA),
-				pkg:         absPkg,
+				id:             mapping.ID,
+				name:           mapping.Name,
+				funcObjectName: funcObjectName(a.Type(), b.Type()),
+				funcName:       mapping.MethodName(OperandA),
+				pkg:            absPkg,
 			})
 			if mapping.Bidirectional {
 				mapperFuncs = append(mapperFuncs, &mapperFunc{
-					id:          mapping.ID,
-					name:        mapping.Name,
-					mappersName: mappersName(b.Type(), a.Type()),
-					funcName:    mapping.MethodName(OperandB),
-					pkg:         absPkg,
+					id:             mapping.ID,
+					name:           mapping.Name,
+					funcObjectName: funcObjectName(b.Type(), a.Type()),
+					funcName:       mapping.MethodName(OperandB),
+					pkg:            absPkg,
 				})
 			}
 
@@ -886,7 +886,7 @@ func (g *generator) Generate() error {
 		for _, mf := range mctx.MapperFuncFields() {
 			mapperFieldNames = append(mapperFieldNames, fmt.Sprintf("%s %s", mf.FieldName, mf.Signature(mctx)))
 			initMapperFields = append(initMapperFields,
-				fmt.Sprintf(`if obj, err := mapperGetter.GetMapperFunc("%s", "%s"); err == nil {`,
+				fmt.Sprintf(`if obj, err := mapperGetter.GetFuncByTypeName("%s", "%s"); err == nil {`,
 					GetQualifiedTypeName(mf.Source), GetQualifiedTypeName(mf.Dest)),
 				fmt.Sprintf(`  m.%s = obj.(%s)`, mf.FieldName, mf.Signature(mctx)),
 				`}`)
@@ -894,7 +894,7 @@ func (g *generator) Generate() error {
 		for _, cf := range mctx.ConverterFuncFields() {
 			mapperFieldNames = append(mapperFieldNames, fmt.Sprintf("%s %s", cf.FieldName, cf.Signature(mctx)))
 			initMapperFields = append(initMapperFields,
-				fmt.Sprintf(`if obj, err := mapperGetter.GetConverterFunc("%s", "%s"); err == nil {`,
+				fmt.Sprintf(`if obj, err := mapperGetter.GetFuncByTypeName("%s", "%s"); err == nil {`,
 					GetQualifiedTypeName(cf.Source), GetQualifiedTypeName(cf.Dest)),
 				fmt.Sprintf(`  m.%s = obj.(%s)`, cf.FieldName, cf.Signature(mctx)),
 				`}`)

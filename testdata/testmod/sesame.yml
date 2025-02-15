@@ -46,5 +46,31 @@ mappings:
       - b: ID
       - b: User
       - b: Finished
+  - name: AddressMapper
+    package: mapper
+    destination: ./mapper/address_mapper_gen.go
+    bidirectional: true
+    a:
+      package: ./model
+      name: AddressModel 
+    b:
+      package: ./domain
+      name: Address
+    nil-map: nil
+    nil-slice: nil
+    ignore-case: true
+  - name: UserMapper
+    package: mapper
+    destination: ./mapper/user_mapper_gen.go
+    bidirectional: true
+    a:
+      package: ./model
+      name: UserModel 
+    b:
+      package: ./domain
+      name: User
+    nil-map: nil
+    nil-slice: nil
+    ignore-case: true
 _includes:
   - ./*/**/*_sesame.yml

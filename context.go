@@ -49,8 +49,8 @@ type ConverterFuncField struct {
 	// FieldName is a name of the field.
 	FieldName string
 
-	// ConverterFuncName is a name of the mapper function.
-	ConverterFuncName string
+	// FuncObjectName is a name of the mapper function.
+	FuncObjectName string
 
 	// Source is a source type of the function.
 	Source types.Type
@@ -166,7 +166,7 @@ func (c *MappingContext) AddMapperFuncField(sourceType types.Type, destType type
 	if sname == dname {
 		return
 	}
-	mapperFuncName := mappersName(sourceType, destType)
+	mapperFuncName := funcObjectName(sourceType, destType)
 	for _, m := range c.mapperFuncFields {
 		if m.MapperFuncName == mapperFuncName {
 			return
@@ -184,7 +184,7 @@ func (c *MappingContext) AddMapperFuncField(sourceType types.Type, destType type
 
 // GetMapperFuncFieldName returns a mapper function field name.
 func (c *MappingContext) GetMapperFuncFieldName(sourceType types.Type, destType types.Type) *MapperFuncField {
-	mapperFuncName := mappersName(sourceType, destType)
+	mapperFuncName := funcObjectName(sourceType, destType)
 	for _, m := range c.mapperFuncFields {
 		if m.MapperFuncName == mapperFuncName {
 			return m
@@ -205,27 +205,27 @@ func (c *MappingContext) AddConverterFuncField(sourceType types.Type, destType t
 	if sname == dname {
 		return
 	}
-	converterFuncName := convertersName(sourceType, destType)
+	converterFuncName := funcObjectName(sourceType, destType)
 	for _, m := range c.converterFuncFields {
-		if m.ConverterFuncName == converterFuncName {
+		if m.FuncObjectName == converterFuncName {
 			return
 		}
 	}
 	fieldName := fmt.Sprintf("converter%05d", c.converterFuncCount)
 	c.converterFuncCount++
 	c.converterFuncFields = append(c.converterFuncFields, &ConverterFuncField{
-		FieldName:         fieldName,
-		ConverterFuncName: converterFuncName,
-		Source:            sourceType,
-		Dest:              destType,
+		FieldName:      fieldName,
+		FuncObjectName: converterFuncName,
+		Source:         sourceType,
+		Dest:           destType,
 	})
 }
 
 // GetConverterFuncFieldName returns a converter function field name.
 func (c *MappingContext) GetConverterFuncFieldName(sourceType types.Type, destType types.Type) *ConverterFuncField {
-	converterFuncName := convertersName(sourceType, destType)
+	converterFuncName := funcObjectName(sourceType, destType)
 	for _, m := range c.converterFuncFields {
-		if m.ConverterFuncName == converterFuncName {
+		if m.FuncObjectName == converterFuncName {
 			return m
 		}
 	}
