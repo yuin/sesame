@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yuin/sesame"
+	sesameinternal "github.com/yuin/sesame/internal"
 )
 
 func main() {
 	if len(os.Getenv("DEBUG")) != 0 {
-		sesame.LogEnabledFor = sesame.LogLevelDebug
+		sesameinternal.LogEnabledFor = sesameinternal.LogLevelDebug
 	}
 
 	generateCmd := flag.NewFlagSet("generate", flag.ExitOnError)
@@ -33,7 +33,7 @@ redo:
 	case "generate":
 		err := generateCmd.Parse(args)
 		if err != nil {
-			sesame.LogFunc(sesame.LogLevelError, err.Error())
+			sesameinternal.LogFunc(sesameinternal.LogLevelError, err.Error())
 			os.Exit(1)
 		}
 		if *generateHelp {
@@ -41,20 +41,20 @@ redo:
 			os.Exit(1)
 		}
 		if *generateQuiet {
-			sesame.LogEnabledFor = sesame.LogLevelError
+			sesameinternal.LogEnabledFor = sesameinternal.LogLevelError
 		}
-		var config sesame.Generation
-		if err := sesame.LoadConfig(&config, *generateConfig); err != nil {
-			sesame.LogFunc(sesame.LogLevelError, err.Error())
+		var config sesameinternal.Generation
+		if err := sesameinternal.LoadConfig(&config, *generateConfig); err != nil {
+			sesameinternal.LogFunc(sesameinternal.LogLevelError, err.Error())
 			os.Exit(1)
 		}
-		if sesame.LogEnabledFor >= sesame.LogLevelDebug {
+		if sesameinternal.LogEnabledFor >= sesameinternal.LogLevelDebug {
 			b, _ := json.Marshal(&config)
-			sesame.LogFunc(sesame.LogLevelDebug, string(b))
+			sesameinternal.LogFunc(sesameinternal.LogLevelDebug, string(b))
 		}
-		generator := sesame.NewGenerator(&config)
+		generator := sesameinternal.NewGenerator(&config)
 		if err := generator.Generate(); err != nil {
-			sesame.LogFunc(sesame.LogLevelError, err.Error())
+			sesameinternal.LogFunc(sesameinternal.LogLevelError, err.Error())
 			os.Exit(1)
 		}
 	case "-h":

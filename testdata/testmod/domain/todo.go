@@ -19,6 +19,7 @@ type Todo struct {
 	Tags         [5]string
 	Finished     bool
 	UpdatedAt    time.Time
+	CreatedAt    time.Time
 	Inf          Inf
 	privateValue int
 }

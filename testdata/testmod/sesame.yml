@@ -23,6 +23,11 @@ mappings:
         b: Finished
       - a: UserID
         b: User.ID
+      - a: UserAddress
+        b: User.Address
+      - a: CreatedAt
+        b: CreatedAt
+        uses: FixedTimeStringConverter
     ignores:
       - a: ValidateOnly
       - b: User
@@ -38,9 +43,14 @@ mappings:
       package: ./domain
       name: Todo
     nil-map: empty
+    fields:
+      - a: CreatedAt
+        b: CreatedAt
+        uses: FixedTimeStringConverter
     ignores:
       - a: Id
       - a: UserID
+      - a: UserAddress
       - a: Done
       - a: ValidateOnly
       - b: ID
@@ -59,6 +69,13 @@ mappings:
     nil-map: nil
     nil-slice: nil
     ignore-case: true
+    fields:
+      - a: Street
+        b: Street
+        uses: StreetConverter
+      - a: IntValues
+        b: StringValues
+        uses-for-elements: IntStringConverter
   - name: UserMapper
     package: mapper
     destination: ./mapper/user_mapper_gen.go

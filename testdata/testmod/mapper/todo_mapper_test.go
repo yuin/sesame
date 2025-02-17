@@ -30,6 +30,7 @@ func TestTodoMapper(t *testing.T) {
 	mappers := NewMappers()
 	mapper.AddTimeToStringConverter(mappers)
 	mapper.AddInfToStringConverter(mappers)
+	mapper.AddStreetConverter(mappers)
 	ctx := context.TODO()
 
 	obj, err := mappers.Get("testdata.TodoMapper")
@@ -41,8 +42,12 @@ func TestTodoMapper(t *testing.T) {
 	source := &model.TodoModel{
 		Id:     1,
 		UserID: "AAA",
-		Title:  "Write unit tests",
-		Type:   1,
+		UserAddress: &model.AddressModel{
+			Pref:   "Tokyo",
+			Street: []int{1, 2, 3},
+		},
+		Title: "Write unit tests",
+		Type:  1,
 		Attributes: map[string][]string{
 			"Date":     []string{"20240101", "20240130"},
 			"Priority": []string{"High"},
@@ -50,6 +55,7 @@ func TestTodoMapper(t *testing.T) {
 		Tags:         [5]string{"Task"},
 		Done:         false,
 		UpdatedAt:    "2023-07-18T10:15:36Z",
+		CreatedAt:    "2021-01-01T00:00:00Z",
 		Inf:          "hoge",
 		ValidateOnly: true,
 	}
@@ -64,6 +70,10 @@ func TestTodoMapper(t *testing.T) {
 		ID: 1,
 		User: &domain.User{
 			ID: "AAA",
+			Address: &domain.Address{
+				Pref:   "Tokyo",
+				Street: "1-2-3",
+			},
 		},
 		Title: "Write unit tests",
 		Type:  domain.TodoTypePrivate,
@@ -74,6 +84,7 @@ func TestTodoMapper(t *testing.T) {
 		Tags:      [5]string{"Task"},
 		Finished:  false,
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
+		CreatedAt: mustTime("2021-01-01T00:00:00Z"),
 		Inf:       &domain.InfV{"hoge"},
 	}
 	expected.SetPrivateValue(10)
@@ -176,6 +187,7 @@ func TestMapperHelper(t *testing.T) {
 		Tags:      [5]string{"Task"},
 		Finished:  false,
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
+		CreatedAt: mustTime("2021-01-01T00:00:00Z"),
 	}
 
 	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
@@ -221,6 +233,7 @@ func TestNilCollection(t *testing.T) {
 		Tags:       [5]string{"Task"},
 		Finished:   false,
 		UpdatedAt:  mustTime("2023-07-18T10:15:36Z"),
+		CreatedAt:  mustTime("2021-01-01T00:00:00Z"),
 	}
 
 	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {
@@ -257,6 +270,7 @@ func TestNilCollection(t *testing.T) {
 		Tags:      [5]string{"Task"},
 		Finished:  false,
 		UpdatedAt: mustTime("2023-07-18T10:15:36Z"),
+		CreatedAt: mustTime("2021-01-01T00:00:00Z"),
 	}
 
 	if diff := cmp.Diff(expected, &entity, todoEntityIgnores); len(diff) != 0 {

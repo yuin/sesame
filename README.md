@@ -29,7 +29,7 @@ Any kind of feedbacks are wellcome.
 
 ## Features
 
-- **Fast** : sesame generates object-to-object mappers source codes that **DO NOT** use reflections.
+- **Fast** : sesame generates object-to-object mappers source codes that **DO NOT** use reflections in mapping logics.
 - **Easy to debug** : If some fields are not mapped correctly, you just look a generated mapper source codes.
 - **Flexible** : sesame provides various way to map objects.
   - By name
@@ -38,6 +38,7 @@ Any kind of feedbacks are wellcome.
     - Embedded struct mapping
   - By type
   - By helper function that is written in Go
+  - By conterter that is written in Go
 - **Zero 3rd-party dependencies at runtime** : sesame generates codes that depend only standard libraries.
 - **Scalable** : 
   - Fast, Easy to debug and flexible. 
@@ -48,19 +49,28 @@ Any kind of feedbacks are wellcome.
 - Your project must be a Go module.
 
 ## Installation
-### Binary installation
+#### `sesame` command
+#### Binary installation
 Get a binary from [releases](https://github.com/yuin/sesame/releases) .
 
-### go get
+#### go get
 sesame requires Go 1.20+.
 
-```go
+```bash
 $ go install github.com/yuin/sesame/cmd/sesame@latest
+```
+
+#### Library
+
+```bash
+$ go get -u github.com/yuin/sesame
 ```
 
 ## Usage
 ### Outline
 
+1. Install the `sesame` command.
+1. Add `github.com/yuin/sesame` to your `go.mod` file.
 1. Create a configuration file(s).
 2. Run the `sesame` command.
 3. Create a `Mappers` object in your code.
@@ -118,7 +128,11 @@ func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Tim
 
 A source argument is a pointer or an interface. Returned value types will be a:
 
-- primitive types(i.e. `string`, `int`, `slice` ...): `value, isnil, error`
+- primitive types(i.e. `string`, `int`, ... `array`): `value, isnil, error`
+  - example: returns `string, bool, error`
+    - if `isnil` is true and a mapping destination is a pointer, the destination will be nil.
+- slices, maps: `value`, `error`
+  - example: returns `[]int, error`
 - interface: `interface`, `error`
 - others: `pointer, error`
 
@@ -174,6 +188,14 @@ mappings:                                        # configurations for object-to-
         b: Finished                              #   you can define mappings for embedded structs by '*'
       - a: UserID                                # 
         b: User.ID                               #
+      - a: Address
+      - b: Address
+        uses: AddressConverter                   # instead of global one, you can use a converter for this field
+                                                 #
+      - a: IntList                               # if a field is a collection, you can define `uses` or `uses-for-elements`.
+        b: StringList                            # with `uses` sesame uses the converter for the whole collection.
+        uses-for-elements: StringIntConverter    # with `uses-for-elements` sesame uses the converter for each element.
+                                                 #
     ignores:                                     # ignores fields in operand X
       - a: ValidateOnly
       - b: User
@@ -182,6 +204,9 @@ _includes:                                       # includes separated configurat
 ```
 
 And now, you can generate source codes just run `sesame` command in `${YOUR_GO_MODULE_ROOT}`.
+
+Generated mappers are added as globals. Generated mappers will use global mappers if target
+objects have fields that any global mappers can map/convert to other types.
 
 This configuration will generate the codes like the following:
 
@@ -218,8 +243,8 @@ Mapping codes look like the following:
 1. Create new Mappers object as a singleton object. The Mappers object is a groutine-safe.
 
    ```go
-   mappers := mapper.NewMappers()           // Creates new Mappers object
-   mapper.AddTimeToStringConverter(mappers)    // Add converter
+   mappers := mapper.NewMappers()           // Creates new `Mappers` object with generated mappers
+   mappers.Add("TimeToStringConverter", &TimeStringConverter{})  // Add converter
    mappers.Add("TodoMapperHelper", &todoMapperHelper{}) // Add helpers
    ```
 
@@ -235,10 +260,10 @@ Mapping codes look like the following:
    err := todoMapper.ModelToEntity(ctx, model, &entity) 
    ```
 
-   `TypedMappers` is a helper object that provides type-safe `Get` method.
+   `sesame.Get` is a helper object that provides type-safe `Get` method.
 
    ```go
-   todoMapper, err := NewTypedMappers[TodoMapper](mappers).Get("TodoMapper")
+   todoMapper, err := sesame.Get[TodoMapper](mappers)
    ```
 
 ### Add Converters
@@ -274,11 +299,12 @@ func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Tim
 	return source.Format(time.RFC3339), false, nil
 }
 
-func AddTimeToStringConverter(mappers interface {
-	Add(string, any)
-}) {
+func AddTimeToStringConverter(mappers Mappers) {
 	stringTime := &TimeStringConverter{}
-	mappers.Add("TimeStringConverter", stringTime)
+	mappers.Add("TimeStringConverter", stringTime) // add as globals
+	// add as no-globals. `uses` or `uses-for-elements` in the configuration file can use this converter.
+	// mappers.Add("TimeStringConverter", stringTime, sesame.WithNoGlobals()) 
+                                             
 }
 ```
 
@@ -325,7 +351,7 @@ type MyMapper interface {
     // ...
 }
 
-NewTypedMappers[MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (MyMapper, error) {
+sesame.AddFactory[MyMapper](mappers, "MyMapper", func(m sesame.MapperGetter) (MyMapper, error) {
     // you can get other mappers and converts from m
     return &myMapper{}, nil
 })
@@ -338,62 +364,99 @@ type MyMapper struct {
     // ...
 }
 
-NewTypedMappers[*MyMapper](mappers).AddFactory("MyMapper", func(m MapperGetter) (*MyMapper, error) {
+sesame.AddFactory[*MyMapper](mappers, "MyMapper", func(m sesame.MapperGetter) (*MyMapper, error) {
     return &MyMapper{}, nil
 })
 ```
 
-Since `NewTypedMapper` is defined in mappers package, so you can not use it bacause cyclic imports depends on your package structure.
-
-You can add factories using reflections instead of `NewTypedMappers`:
+You can add factories using reflections instead of `sesame.*` type-safe functions:
 
 ```go
-var t MyMapper // MyMapper can be a struct or an interface
-mappers.AddFactory("MyMapper", reflect.TypeOf(&t), func(m MapperGetter) (any, error) {
+// MyMapper is an interface, so you must use `Elem()`
+mappers.AddFactory("MyMapper", reflect.TypeOf((*MyMapper)(nil)).Elem(), func(m sesame.MapperGetter) (any, error) {
     return &myMapper{}, nil
 })
 ```
 
-### Multiple mappers and converters for same type combinations
-sesame does not allow to define multiple mappers and converts for same type combinations.
-If you want to define multiple mappers and converts for same type combinations
+2nd argument of `AddFactory` must be a `reflect.Type` of a mapper interface or a `reflect.Type` of a mapper struct pointer.
+Note that Go can not get interface type from nil interface value. You must use a interface pointer and its `Elem()`.
+### Recommended project structure
+Package relations with generated Go files are:
 
-1. Set `ignore` to `true` for the field in the configuration file.
-2. Manually map or convert field in Helper.
+- Generated `Mappers` depends on all generated `Mapper`s
+- Generated `Mapper`s depends on mapping targets
 
-### Merge mappers
-Large applications often consist of multiple go modules.
+**Examples (1):**
 
 ```
 /
-|
-+--- domain        : core business logics
-|      |
-|      +--- go.mod
-|
-+--- grpc          : gRPC service
-|      |
-|      +--- go.mod
-|      +--- sesame.yml
-|
-+--- lib           : libraries
-       |
-       +--- go.mod
-       +--- sesame.yml
++-- mapper/
+|   +-- mappers_gen.go  : generated `Mappers`
+|   +-- mapper.go       : add hand-written mappers, converters and helpers
++-- todo/               : contains `base` elements like `struct Todo{base.Entity}`
+|   +-- todo_mapper_gen.go : generated `Mapper`
+|   +-- todo_model.go   : model definition
+|   +-- todo_entity.go  : entity definition
+|   +-- todo_usecase.go : business logic uses a `Mapper`
++-- base/
+|   +-- base_mapper_gen.go : generated `Mapper`
+|   +-- base_model.go   : model definition
+|   +-- base_entity.go  : entity definition
++ cmd/main/main.go : create `Mappers`, `Mapper`  and `TodoUsecase`
 ```
 
-- `lib` defines common mappers like 'StringTimeMapper' .
-- `gRPC` defines gRPC spcific mappers that maps `protoc` generated models to domain entities
+```mermaid
+flowchart LR
+   main -- NewMappers --> mapper
+   main -- NewTodoUseCase(<br>mappers.Get(TodoMapper)) --> todo
+   mapper -- NewTodoMapper --> todo
+   mapper -- NewBaseMapper --> base
+   todo --> base
+```
 
-You can merge mappers like the following:
+**Examples (2):**
+
+```
+/
++-- mapper/
+|   +-- mappers_gen.go  : generated `Mappers`
+|   +-- mapper.go       : add hand-written mappers, converters and helpers
+|   +-- todo_mapper_gen.go : generated `Mapper`
+|   +-- base_mapper_gen.go : generated `Mapper`
++-- model/
+|   +-- todo_model.go   : model definition
+|   +-- base_model.go   : model definition
++-- domain/
+|   +-- todo_entity.go  : entity definition
+|   +-- base_entity.go  : entity definition
++-- usecase/
+|   +-- todo_usecase.go : business logic uses a `Mapper`
++ cmd/main/main.go : uses `Mappers`, `Mapper` and `TodoUsecase`
+```
+
+```mermaid
+flowchart LR
+   main -- NewMappers --> mapper
+   main -- NewTodoUsecase(<br>mappers.Get(TodoMapper)) --> usecase
+   usecase --> mapper
+   usecase --> model
+   usecase --> domain
+   mapper -- NewTodoMapper<br>NewBaseMapper --> model
+   mapper -- NewTodoMapper<br>NewBaseMapper --> domain
+```
+
+### Merge mappers
 
 ```go
-grpcMappers := grpc_mappers.NewMappers()
-err := grpcMappers.Merge(domain_mappers.NewMappers())
-// Now grpcMappers has all mappers defined in domain_mappers and grpc_mappers
+mappers := domain_mappers.NewMappers()
+err := mappers.Merge(grpc_mappers.NewMappers())
+// Now mappers have all mappers defined in domain_mappers and grpc_mappers
+// If there are objects with the same id, grpc_mappers' objects are used.
+// If there are globals for same types, grpc_mappers' objects are used.
 ```
 
 Note that merging must be done before any `Get` calls.
+
 
 ## Donation
 BTC: 1NEDSyUmo4SMTDP83JJQSWi1MvQUGGNMZB

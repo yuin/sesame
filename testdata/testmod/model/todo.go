@@ -3,12 +3,14 @@ package model
 type TodoModel struct {
 	Id           int
 	UserID       string
+	UserAddress  *AddressModel
 	Title        string
 	Type         int
 	Attributes   map[string][]string
 	Tags         [5]string
 	Done         bool
 	UpdatedAt    string
+	CreatedAt    string
 	ValidateOnly bool
 	Inf          string
 	privateValue int

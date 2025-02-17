@@ -28,7 +28,7 @@ func TestRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error() + ":" + string(out))
 	}
-	cmd = exec.Command("go", "test", "-v", "./...")
+	cmd = exec.Command("go", "test", "-v", "./...", "-count=1")
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		t.Fatal(err.Error() + ":" + string(out))

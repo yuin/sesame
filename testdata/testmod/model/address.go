@@ -1,5 +1,7 @@
 package model
 
 type AddressModel struct {
-	Pref string
+	Pref      string
+	Street    []int
+	IntValues []int
 }
