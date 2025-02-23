@@ -767,7 +767,8 @@ func (g *generator) Generate() error {
 	var mapperList []*mapper
 	mappersContext := NewMappingContext(mappersAbsPkg)
 
-	for dest, mappings := range dests {
+	for _, dest := range SortedKeys(dests) {
+		mappings := dests[dest]
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 			return err
 		}
