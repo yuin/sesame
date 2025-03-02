@@ -923,7 +923,9 @@ func (g *generator) Generate() error {
 				fmt.Sprintf(`if obj, err := mapperGetter.GetFuncByTypeName("%s", "%s", "%s"); err == nil {`,
 					mf.ObjectID,
 					GetQualifiedTypeName(mf.Source), GetQualifiedTypeName(mf.Dest)),
-				fmt.Sprintf(`  m.%s = obj.(%s)`, mf.FieldName, mf.Signature(mctx)),
+				fmt.Sprintf(`  if v, ok := obj.(%s); ok {`, mf.Signature(mctx)),
+				fmt.Sprintf(`    m.%s = v`, mf.FieldName),
+				`  }`,
 				`}`)
 		}
 
@@ -933,7 +935,9 @@ func (g *generator) Generate() error {
 				fmt.Sprintf(`if obj, err := mapperGetter.GetFuncByTypeName("%s", "%s", "%s"); err == nil {`,
 					cf.ObjectID,
 					GetQualifiedTypeName(cf.Source), GetQualifiedTypeName(cf.Dest)),
-				fmt.Sprintf(`  m.%s = obj.(%s)`, cf.FieldName, cf.Signature(mctx)),
+				fmt.Sprintf(`  if v, ok := obj.(%s); ok {`, cf.Signature(mctx)),
+				fmt.Sprintf(`    m.%s = v`, cf.FieldName),
+				`  }`,
 				`}`)
 		}
 		var imps []string
@@ -987,7 +991,7 @@ func genMappers(mappers *Mappers, mapperList []*mapper, mctx *MappingContext) er
 		}
 
 		typeName := fmt.Sprintf("%s%s", prefix, m.name)
-		ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", reflect.TypeOf((*%s)(nil)).Elem(), func(ms sesame.MapperGetter) (any, error) {`,
+		ms = append(ms, fmt.Sprintf(`mappers.AddFactory("%s", reflect.TypeOf((*%s)(nil)).Elem(), func(ms sesame.MapperGetter) (any, error) {`, // nolint
 			m.id, typeName))
 		ms = append(ms, fmt.Sprintf("return %sNew%s(ms), nil", prefix, m.name))
 		ms = append(ms, "})")
@@ -1308,6 +1312,7 @@ func genAssignStmt(printer Printer,
 		_, dstruct := GetStructType(destType)
 		if sstruct && dstruct {
 			mctx.AddMapperFuncField(sourceType, destType, fid)
+			mctx.AddConverterFuncField(sourceType, destType, fid)
 		} else {
 			mctx.AddConverterFuncField(sourceType, destType, fid)
 		}
@@ -1321,6 +1326,7 @@ func genAssignStmt(printer Printer,
 	if cf != nil || mf != nil {
 		p("done%d := false", done)
 	}
+	// Try converter first
 	if cf != nil {
 		var argName string
 		switch {
@@ -1371,8 +1377,8 @@ func genAssignStmt(printer Printer,
 		p("}")
 	}
 
-	// mappers are applied only both source and dest are structs or struct pointers
 	if mf != nil {
+		// mappers are applied only both source and dest are structs or struct pointers
 		var argName string
 		guard := ""
 		switch {

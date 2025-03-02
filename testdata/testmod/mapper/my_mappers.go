@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"example.com/testmod/domain"
+	"example.com/testmod/model"
 	"github.com/yuin/sesame"
 )
 
@@ -126,4 +127,20 @@ func (m *IntStringConverter) IntToString(ctx context.Context, source *int) (stri
 
 func AddIntStringConverter(mappers sesame.Mappers) {
 	mappers.Add("IntStringConverter", &IntStringConverter{})
+}
+
+type Date1Converter struct {
+}
+
+func (m *Date1Converter) ModelToEntity(ctx context.Context, source *model.Date1) (*domain.Date1, error) {
+	v, _ := strconv.Atoi(source.Year)
+	return &domain.Date1{Year: v}, nil
+}
+
+func (m *Date1Converter) EntityToModel(ctx context.Context, source *domain.Date1) (*model.Date1, error) {
+	return &model.Date1{Year: strconv.Itoa(source.Year)}, nil
+}
+
+func AddDate1Converter(mappers sesame.Mappers) {
+	mappers.Add("Date1Converter", &Date1Converter{})
 }

@@ -85,7 +85,7 @@ sesame consists of 3 kind of objects: **Mapper**, **Converter**, and **Helper** 
 
 #### Mapper
 Mappers map struct fields from A to B and B to A.  Mappers only work when source
-object is not nil.
+object is not nil. Mappers always overwrite destination fields.
 
 Mapper has methods like the following:
 
@@ -96,10 +96,11 @@ type TodoMapper interface {
 }
 ```
 
-Source and destination arguments are always pointers.
+Source and destination arguments are always struct pointers.
 
 #### Converter
 Converters convert a value from A to B and B to A. Converters work even if source object is nil.
+Converters always create a new value unlike Mappers that always overwrite existing values.
 
 Converter has methods like the following:
 
@@ -128,9 +129,9 @@ func (m *TimeStringConverter) TimeToString(ctx context.Context, source *time.Tim
 
 A source argument is a pointer or an interface. Returned value types will be a:
 
-- primitive types(i.e. `string`, `int`, ... `array`): `value, isnil, error`
+- primitive types(i.e. `string`, `int`, ... `array`): `value, prefernil, error`
   - example: returns `string, bool, error`
-    - if `isnil` is true and a mapping destination is a pointer, the destination will be nil.
+    - if `prefernil` is true and a mapping destination is a pointer, the destination will be nil.
 - slices, maps: `value`, `error`
   - example: returns `[]int, error`
 - interface: `interface`, `error`
@@ -140,8 +141,10 @@ Note that a source argument can be nil.
 
 ### Differences between Mapper and Converter
 
-- Mapper is used for mapping struct fields. source and destination arguments are always struct pointers.
-- Other conversions are done by Converters. source and destination argument can be any types.
+- Mappers are used for mapping struct fields. source and destination arguments are always struct pointers. A destination object must be initialized before mapping.
+- Converters are used for converting any values. source and destination argument can be any types. Converters always create a new value.
+
+If same type combinations are used in converters and mappers, converters will be used.
 
 ### Naming convention
 

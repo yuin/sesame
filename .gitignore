@@ -15,3 +15,5 @@ cmd/sesame/sesame
 *_gen.go
 
 dist/
+
+main

@@ -31,6 +31,7 @@ func TestTodoMapper(t *testing.T) {
 	mapper.AddTimeToStringConverter(mappers)
 	mapper.AddInfToStringConverter(mappers)
 	mapper.AddStreetConverter(mappers)
+	mapper.AddDate1Converter(mappers)
 	ctx := context.TODO()
 
 	obj, err := mappers.Get("testdata.TodoMapper")
@@ -45,6 +46,9 @@ func TestTodoMapper(t *testing.T) {
 		UserAddress: &model.AddressModel{
 			Pref:   "Tokyo",
 			Street: []int{1, 2, 3},
+			Date: &model.Date1{
+				Year: "2021",
+			},
 		},
 		Title: "Write unit tests",
 		Type:  1,
@@ -73,6 +77,9 @@ func TestTodoMapper(t *testing.T) {
 			Address: &domain.Address{
 				Pref:   "Tokyo",
 				Street: "1-2-3",
+				Date: domain.Date1{
+					Year: 2021,
+				},
 			},
 		},
 		Title: "Write unit tests",
