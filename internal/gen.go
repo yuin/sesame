@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -984,6 +985,9 @@ func genMappers(mappers *Mappers, mapperList []*mapper, mctx *MappingContext) er
 	}
 
 	var ms []string
+	slices.SortStableFunc(mapperList, func(a, b *mapper) int {
+		return strings.Compare(a.id, b.id)
+	})
 	for _, m := range mapperList {
 		prefix := ""
 		if alias := mctx.GetImportAlias(m.pkg); len(alias) > 0 {
