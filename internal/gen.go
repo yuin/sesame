@@ -1453,7 +1453,7 @@ func genAssignStmt(printer Printer,
 				p(destValue.GetSetterSource("&(" + sourceSig + ")"))
 			} else {
 				a := mctx.NextVarCount()
-				p("s%d := ", a, sourceSig)
+				p("s%d := %s", a, sourceSig)
 				p(destValue.GetSetterSource(fmt.Sprintf("&s%d", a)))
 			}
 		case !sourceIsNillable && !destIsNillable:
