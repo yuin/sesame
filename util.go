@@ -1,6 +1,9 @@
 package sesame
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 func getType[T any]() reflect.Type {
 	var v T
@@ -13,8 +16,21 @@ func getType[T any]() reflect.Type {
 
 func toTypeName(typ reflect.Type) string {
 	if typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
+		return toTypeName(typ.Elem())
 	}
+
+	if typ.Kind() == reflect.Slice {
+		return "[]" + toTypeName(typ.Elem())
+	}
+
+	if typ.Kind() == reflect.Array {
+		return fmt.Sprintf("[%d]%s", typ.Len(), toTypeName(typ.Elem()))
+	}
+
+	if typ.Kind() == reflect.Map {
+		return fmt.Sprintf("map[%s]%s", toTypeName(typ.Key()), toTypeName(typ.Elem()))
+	}
+
 	name := typ.Name()
 	if len(typ.PkgPath()) != 0 {
 		name = typ.PkgPath() + "#" + name

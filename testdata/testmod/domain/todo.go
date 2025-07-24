@@ -10,6 +10,8 @@ const (
 	TodoTypeWork
 )
 
+type Priority string
+
 type Todo struct {
 	ID           int64
 	Type         TodoType
@@ -17,6 +19,7 @@ type Todo struct {
 	Title        string
 	Attributes   map[string][]string
 	Tags         [5]string
+	Priorities   []Priority
 	Finished     bool
 	UpdatedAt    time.Time
 	CreatedAt    time.Time

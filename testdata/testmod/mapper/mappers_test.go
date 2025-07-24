@@ -19,6 +19,7 @@ func TestMappersGetFunc(t *testing.T) {
 	mapper.AddInfToStringConverter(mappers)
 	mapper.AddStreetConverter(mappers)
 	mapper.AddDate1Converter(mappers)
+	mapper.AddPrioritiesConverter(mappers)
 	ctx := context.TODO()
 
 	_, err := sesame.GetMapperFunc[*model.Date1, *domain.Date1](mappers, "")

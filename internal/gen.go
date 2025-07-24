@@ -100,7 +100,7 @@ func stringToNilCollectionHookFunc() mapstructure.DecodeHookFunc {
 	return func(
 		f reflect.Type,
 		t reflect.Type,
-		data interface{}) (interface{}, error) {
+		data any) (any, error) {
 		if f.Kind() != reflect.String || t.String() != "internal.NilCollection" {
 			return data, nil
 		}

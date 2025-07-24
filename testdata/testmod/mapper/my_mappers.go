@@ -144,3 +144,33 @@ func (m *Date1Converter) EntityToModel(ctx context.Context, source *domain.Date1
 func AddDate1Converter(mappers sesame.Mappers) {
 	mappers.Add("Date1Converter", &Date1Converter{})
 }
+
+type PrioritiesStringConverter struct {
+}
+
+func (m *PrioritiesStringConverter) StringToSlice(ctx context.Context, source *string) ([]domain.Priority, error) {
+	if source == nil {
+		return nil, nil
+	}
+	parts := strings.Split(*source, ",")
+	result := make([]domain.Priority, len(parts))
+	for i, part := range parts {
+		result[i] = domain.Priority(part)
+	}
+	return result, nil
+}
+
+func (m *PrioritiesStringConverter) SliceToString(ctx context.Context, source []domain.Priority) (string, bool, error) {
+	if source == nil {
+		return "", true, nil
+	}
+	parts := make([]string, len(source))
+	for i, part := range source {
+		parts[i] = string(part)
+	}
+	return strings.Join(parts, ","), false, nil
+}
+
+func AddPrioritiesConverter(mappers sesame.Mappers) {
+	mappers.Add("PrioritiesStringConverter", &PrioritiesStringConverter{})
+}

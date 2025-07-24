@@ -8,6 +8,7 @@ type TodoModel struct {
 	Type         int
 	Attributes   map[string][]string
 	Tags         [5]string
+	Priorities   string
 	Done         bool
 	UpdatedAt    string
 	CreatedAt    string
