@@ -90,12 +90,13 @@ func TestTodoMapper(t *testing.T) {
 			"Date":     []string{"20240101", "20240130"},
 			"Priority": []string{"High"},
 		},
-		Tags:       [5]string{"Task"},
-		Priorities: []domain.Priority{domain.Priority("High"), domain.Priority("Medium")},
-		Finished:   false,
-		UpdatedAt:  mustTime("2023-07-18T10:15:36Z"),
-		CreatedAt:  mustTime("2021-01-01T00:00:00Z"),
-		Inf:        &domain.InfV{"hoge"},
+		Tags:          [5]string{"Task"},
+		Priorities:    []domain.Priority{domain.Priority("High"), domain.Priority("Medium")},
+		PrioritiesPtr: []*domain.Priority{domain.PriorityPtr("High"), domain.PriorityPtr("Medium")},
+		Finished:      false,
+		UpdatedAt:     mustTime("2023-07-18T10:15:36Z"),
+		CreatedAt:     mustTime("2021-01-01T00:00:00Z"),
+		Inf:           &domain.InfV{"hoge"},
 	}
 	expected.SetPrivateValue(10)
 

@@ -160,6 +160,18 @@ func (m *PrioritiesStringConverter) StringToSlice(ctx context.Context, source *s
 	return result, nil
 }
 
+func (m *PrioritiesStringConverter) StringToPtrSlice(ctx context.Context, source *string) ([]*domain.Priority, error) {
+	if source == nil {
+		return nil, nil
+	}
+	parts := strings.Split(*source, ",")
+	result := make([]*domain.Priority, len(parts))
+	for i, part := range parts {
+		result[i] = domain.PriorityPtr(part)
+	}
+	return result, nil
+}
+
 func (m *PrioritiesStringConverter) SliceToString(ctx context.Context, source []domain.Priority) (string, bool, error) {
 	if source == nil {
 		return "", true, nil

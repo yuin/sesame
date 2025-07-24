@@ -301,8 +301,7 @@ func GetQualifiedTypeName(typ types.Type) string {
 func getQualifiedTypeName(typ types.Type) string {
 	switch t := typ.(type) {
 	case *types.Pointer:
-		//return "*" + getQualifiedTypeName(t.Elem())
-		return getQualifiedTypeName(t.Elem())
+		return "*" + getQualifiedTypeName(t.Elem())
 	case *types.Map:
 		return "map[" + getQualifiedTypeName(t.Key()) + "]" + getQualifiedTypeName(t.Elem())
 	case *types.Slice:

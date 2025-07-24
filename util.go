@@ -16,19 +16,26 @@ func getType[T any]() reflect.Type {
 
 func toTypeName(typ reflect.Type) string {
 	if typ.Kind() == reflect.Ptr {
-		return toTypeName(typ.Elem())
+		return toTypeNameAux(typ.Elem())
+	}
+	return toTypeNameAux(typ)
+}
+
+func toTypeNameAux(typ reflect.Type) string {
+	if typ.Kind() == reflect.Ptr {
+		return "*" + toTypeNameAux(typ.Elem())
 	}
 
 	if typ.Kind() == reflect.Slice {
-		return "[]" + toTypeName(typ.Elem())
+		return "[]" + toTypeNameAux(typ.Elem())
 	}
 
 	if typ.Kind() == reflect.Array {
-		return fmt.Sprintf("[%d]%s", typ.Len(), toTypeName(typ.Elem()))
+		return fmt.Sprintf("[%d]%s", typ.Len(), toTypeNameAux(typ.Elem()))
 	}
 
 	if typ.Kind() == reflect.Map {
-		return fmt.Sprintf("map[%s]%s", toTypeName(typ.Key()), toTypeName(typ.Elem()))
+		return fmt.Sprintf("map[%s]%s", toTypeNameAux(typ.Key()), toTypeNameAux(typ.Elem()))
 	}
 
 	name := typ.Name()

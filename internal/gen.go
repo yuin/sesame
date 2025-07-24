@@ -349,8 +349,8 @@ func (m *FieldMapping) Value(typ OperandType) string {
 type FuncID string
 
 // NewFuncID creates a new [FuncID] .
-func NewFuncID(fid string, sourceType string) FuncID {
-	return FuncID(fmt.Sprintf("%s:%s", fid, sourceType))
+func NewFuncID(fid string, sourceType, destType string) FuncID {
+	return FuncID(fmt.Sprintf("%s:%s:%s", fid, sourceType, destType))
 }
 
 // ObjectID returns an object ID of this function.
@@ -370,9 +370,9 @@ func (f FuncID) SourceType() string {
 }
 
 // UsesFuncID returns a function name that will be used to map this field.
-func (m *FieldMapping) UsesFuncID(typ types.Type) FuncID {
+func (m *FieldMapping) UsesFuncID(styp, dtyp types.Type) FuncID {
 	if m.Uses != "" {
-		return NewFuncID(m.Uses, typ.String())
+		return NewFuncID(m.Uses, styp.String(), dtyp.String())
 	}
 	return ""
 }
@@ -380,23 +380,15 @@ func (m *FieldMapping) UsesFuncID(typ types.Type) FuncID {
 // FieldMappings is a collection of [FieldMapping] s.
 type FieldMappings []*FieldMapping
 
-// Pair returns a paired value.
-func (f FieldMappings) Pair(typ OperandType, value string) (string, bool) {
-	m := f.Find(typ, value)
-	if m == nil {
-		return "", false
-	}
-	return m.Value(typ.Inverted()), true
-}
-
 // Find returns a [FieldMapping] that has a value.
-func (f FieldMappings) Find(typ OperandType, value string) *FieldMapping {
+func (f FieldMappings) Find(typ OperandType, value string) []*FieldMapping {
+	var ret []*FieldMapping
 	for _, m := range f {
 		if m.Value(typ) == value {
-			return m
+			ret = append(ret, m)
 		}
 	}
-	return nil
+	return ret
 }
 
 // ConfigLoaded is an event handler will be executed when config is loaded.
@@ -1056,13 +1048,13 @@ func genMapFuncBody(printer Printer,
 		return fmt.Errorf("%s is not a named type", dest.Type())
 	}
 
-	fieldMapping := mapping.Fields.Find(typ, "*")
-	if fieldMapping != nil { // embedded
-		destName := fieldMapping.Value(typ.Inverted())
+	fieldMappings := mapping.Fields.Find(typ, "*")
+	if len(fieldMappings) != 0 { // embedded
+		destName := fieldMappings[0].Value(typ.Inverted())
 		destField, _ := GetField(destStruct, destName, mapping.IgnoreCase)
 		err := genFieldMapStmts(printer,
 			NewLocalMappingValue(sourceNameBase, destField.Type()),
-			NewLocalMappingValue(destNameBase+"."+destName, destField.Type()), mapping, fieldMapping, mctx)
+			NewLocalMappingValue(destNameBase+"."+destName, destField.Type()), mapping, fieldMappings[0], mctx)
 		if err != nil {
 			return err
 		}
@@ -1078,33 +1070,39 @@ func genMapFuncBody(printer Printer,
 			}
 
 			var destValue MappingValue
-			fieldMapping = mapping.Fields.Find(typ, sourceField.Name())
-			if fieldMapping != nil { // map explicitly
-				destName := fieldMapping.Value(typ.Inverted())
-				var found bool
-				if destName == "*" { // embedded
-					found = true
-					destValue = NewLocalMappingValue(destNameBase, sourceValue.Type())
-				} else {
-					destValue, found = NewObjectPropertyMappingValue(destNameBase, destNamed, destName, mapping.IgnoreCase)
-					found = found && destValue.CanSet()
-					parts := strings.SplitN(destName, ".", -1)
-					if len(parts) > 1 {
-						for i := 1; i < len(parts); i++ {
-							nestName := strings.Join(parts[:i], ".")
-							nestField, ok := GetField(destStruct, nestName, mapping.IgnoreCase)
-							_, pok := nestField.Type().(*types.Pointer)
-							if ok && pok {
-								p("if %s.%s == nil {", destNameBase, nestName)
-								p("  %s.%s = %s{}", destNameBase, nestName, strings.Replace(GetSource(nestField.Type(), mctx), "*", "&", 1))
-								p("}")
+			fieldMappings = mapping.Fields.Find(typ, sourceField.Name())
+			if len(fieldMappings) != 0 { // map explicitly
+				for _, fieldMapping := range fieldMappings {
+					destName := fieldMapping.Value(typ.Inverted())
+					var found bool
+					if destName == "*" { // embedded
+						found = true
+						destValue = NewLocalMappingValue(destNameBase, sourceValue.Type())
+					} else {
+						destValue, found = NewObjectPropertyMappingValue(destNameBase, destNamed, destName, mapping.IgnoreCase)
+						found = found && destValue.CanSet()
+						parts := strings.SplitN(destName, ".", -1)
+						if len(parts) > 1 {
+							for i := 1; i < len(parts); i++ {
+								nestName := strings.Join(parts[:i], ".")
+								nestField, ok := GetField(destStruct, nestName, mapping.IgnoreCase)
+								_, pok := nestField.Type().(*types.Pointer)
+								if ok && pok {
+									p("if %s.%s == nil {", destNameBase, nestName)
+									p("  %s.%s = %s{}", destNameBase, nestName, strings.Replace(GetSource(nestField.Type(), mctx), "*", "&", 1))
+									p("}")
+								}
 							}
 						}
 					}
-				}
-				if !found {
-					return fmt.Errorf("Could not map a field: '%s.%s' to '%s'",
-						source.Pkg().Name(), sourceValue.GetGetterSource(), destName)
+					if !found {
+						return fmt.Errorf("Could not map a field: '%s.%s' to '%s'",
+							source.Pkg().Name(), sourceValue.GetGetterSource(), destName)
+					}
+					err := genFieldMapStmts(printer, sourceValue, destValue, mapping, fieldMapping, mctx)
+					if err != nil {
+						return err
+					}
 				}
 			} else if !mapping.ExplicitOnly { // map implicitly
 				var found bool
@@ -1118,15 +1116,19 @@ func genMapFuncBody(printer Printer,
 					return fmt.Errorf("Unmapped field: '%s.%s.%s'", source.Pkg().Name(), source.Name(), sourceField.Name())
 				}
 				mapping.AddField(typ, sourceField.Name(), sourceField.Name())
-				fieldMapping = mapping.Fields.Find(typ, sourceField.Name())
+				fieldMappings = mapping.Fields.Find(typ, sourceField.Name())
+				for _, fieldMapping := range fieldMappings {
+					if fieldMapping.A == sourceField.Name() && fieldMapping.B == sourceField.Name() {
+						err := genFieldMapStmts(printer, sourceValue, destValue, mapping, fieldMappings[0], mctx)
+						if err != nil {
+							return err
+						}
+					}
+				}
 			} else {
 				continue
 			}
 
-			err := genFieldMapStmts(printer, sourceValue, destValue, mapping, fieldMapping, mctx)
-			if err != nil {
-				return err
-			}
 		}
 
 		for _, fm := range mapping.Fields {
@@ -1168,7 +1170,7 @@ func genFieldMapStmts(printer Printer,
 	switch typ := sourceType.(type) {
 	case *types.Array:
 		if fm.Uses != "" {
-			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ), mctx)
+			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ, destType), mctx)
 			return nil
 		}
 
@@ -1205,7 +1207,7 @@ func genFieldMapStmts(printer Printer,
 			destValue, "", mctx)
 	case *types.Slice:
 		if fm.Uses != "" {
-			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ), mctx)
+			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ, destType), mctx)
 			return nil
 		}
 
@@ -1247,7 +1249,7 @@ func genFieldMapStmts(printer Printer,
 		p("}")
 	case *types.Map:
 		if fm.Uses != "" {
-			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ), mctx)
+			genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ, destType), mctx)
 			return nil
 		}
 		// TODO: support a conversion map and struct?
@@ -1290,7 +1292,7 @@ func genFieldMapStmts(printer Printer,
 	case *types.Chan:
 		LogFunc(LogLevelInfo, "chan type %s ignored", sourceValue.DisplayName())
 	default:
-		genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ), mctx)
+		genAssignStmt(printer, sourceValue, destValue, fm.UsesFuncID(typ, destType), mctx)
 	}
 	return nil
 }

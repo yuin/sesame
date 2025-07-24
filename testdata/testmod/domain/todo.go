@@ -12,19 +12,25 @@ const (
 
 type Priority string
 
+func PriorityPtr(s string) *Priority {
+	p := Priority(s)
+	return &p
+}
+
 type Todo struct {
-	ID           int64
-	Type         TodoType
-	User         *User
-	Title        string
-	Attributes   map[string][]string
-	Tags         [5]string
-	Priorities   []Priority
-	Finished     bool
-	UpdatedAt    time.Time
-	CreatedAt    time.Time
-	Inf          Inf
-	privateValue int
+	ID            int64
+	Type          TodoType
+	User          *User
+	Title         string
+	Attributes    map[string][]string
+	Tags          [5]string
+	Priorities    []Priority
+	PrioritiesPtr []*Priority
+	Finished      bool
+	UpdatedAt     time.Time
+	CreatedAt     time.Time
+	Inf           Inf
+	privateValue  int
 }
 
 func (e *Todo) SetPrivateValue(v int) {
